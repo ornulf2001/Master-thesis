@@ -1,4 +1,6 @@
 For test mhe+mpc example:
+
+*Based on Mohamed W. Mehrez - [MPC and MHE implementation in Matlab using Casadi](https://www.youtube.com/watch?v=RrnkPrcpyEA&list=PLK8squHT_Uzej3UCUHjtOtm5X7pMFSgAL)*
 1. Configure mpc_setup -> mhe_setup (model, weights, constraints, initial values, setpoint values)
 2. Run either mpc alone (run_mpc.m) or mpc+mhe (run_mhe.m)
 
