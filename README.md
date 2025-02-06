@@ -1,3 +1,11 @@
+Newest release is in **test mhe MSD**
+  - Here I develop an MHE routine for estimating the position and velocity of a Mass-spring-damper.
+  - It should be robust for any other linear system, supply only A, B and C, and alter the dimensions/values of the weight matrices R, Q and M.
+  - See /notes mhe setup.pdf for explanation of the cost function and constraints setup + dimensions
+
+
+
+
 For test mhe+mpc example:
 
 *Based on Mohamed W. Mehrez - [MPC and MHE implementation in Matlab using Casadi](https://www.youtube.com/watch?v=RrnkPrcpyEA&list=PLK8squHT_Uzej3UCUHjtOtm5X7pMFSgAL)*
