@@ -1,6 +1,14 @@
-For test mhe+mpc example:
+Newest release is in **test mhe MSD**:
+  - Here I develop an MHE routine for estimating the position and velocity of a Mass-spring-damper (MSD).
+  - It should be robust for any other linear system, supply only A, B and C, and alter the dimensions/values of the weight matrices R, Q and M.
+  - See /notes mhe setup.pdf for explanation of the cost function and constraints setup + dimensions
+  - In /msd_sim.m we set up the simulator. Define initial value and control input sequence.
+  
+ 
+ 
+ 
 
-*Based on Mohamed W. Mehrez - [MPC and MHE implementation in Matlab using Casadi](https://www.youtube.com/watch?v=RrnkPrcpyEA&list=PLK8squHT_Uzej3UCUHjtOtm5X7pMFSgAL)*
+For **test mhe+mpc**: *Based on Mohamed W. Mehrez - [MPC and MHE implementation in Matlab using Casadi](https://www.youtube.com/watch?v=RrnkPrcpyEA&list=PLK8squHT_Uzej3UCUHjtOtm5X7pMFSgAL)*
 1. Configure mpc_setup -> mhe_setup (model, weights, constraints, initial values, setpoint values)
 2. Run either mpc alone (run_mpc.m) or mpc+mhe (run_mhe.m)
 
