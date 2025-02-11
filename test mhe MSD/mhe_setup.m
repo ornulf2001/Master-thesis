@@ -8,7 +8,7 @@ run("msd_sim.m")
 
 
 % Defining misc.
-N_MHE = 10;
+N_MHE = 4;
 nStates = size(Ac,1);
 nControls = size(Bc,2);
 nMeasurements=size(C,1);
@@ -94,10 +94,14 @@ run("init_mhe.m")
 
 
 mhe=MHEclass(N_MHE,Ac,Bc,C,z0_block,x0_sim,dt);
+%class init
 
-classAeq=mhe.Aeq;
-classbeq=mhe.beq;
-isequal(classbeq,beq)
+while ~mhe.isReadyToRun
+    newY=Y_noisy(mhe.yBufferCount);
+    newU=U_list(mhe.uBufferCount);
+    mhe=mhe.bufferInitialData(newY, newU);
+end
+
 %run("run_mhe.m")
 %run("plotting.m")
 

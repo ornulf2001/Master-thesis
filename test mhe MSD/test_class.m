@@ -6,3 +6,4 @@ z0_block=zeros(size(Ac,1),1);
 mhe=MHEclass(N_MHE,Ac,Bc,C,z0_block,x0_sim,dt);
 
 classAeq=mhe.Aeq;
+

@@ -18,6 +18,7 @@ classdef MHEclass
         Aeq
         beq
         x0
+        xCurrent
         dt
         isReadyToRun
         yBufferCount
@@ -39,8 +40,8 @@ classdef MHEclass
             
             
             obj.isReadyToRun = false;
-            obj.yBufferCount = 0;
-            obj.uBufferCount = 0;
+            obj.yBufferCount = 1;
+            obj.uBufferCount = 1;
             obj = obj.initialize();
         end
         
@@ -98,21 +99,45 @@ classdef MHEclass
         
         
         
-%         function obj=bufferInitialData(obj, newY, newU)
-%             obj.yBufferCount=obj.yBufferCount+1;
-%             obj.uBufferCount=obj.uBufferCount+1;
-%             
-%             
-%             %Buffer new measurement
-%             if obj.yBufferCount <= obj.N_MHE + 1 && ~isempty(newY)
-%                 obj.P(obj.nStates + 1:obj.nStates + obj.nMeasurements, obj.yBufferCount + 1) = newY;
-%                 obj.beq(obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.yBufferCount-1)+1 : obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.yBufferCount)) = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, obj.yBufferCount+1);
-%             end
-%             if obj.uBufferCount <= obj.N_MHE && ~isempty(newU)
-%                % objP(nStates+nMeasurements+1:nStates+nMeasurements+nControls,1+(N_MHE+1)+k)=U_list(k);
-%                 %beq(nStates*k-1 : nStates*(k)) = z0_block + B*P(nStates+nMeasurements+1:nStates+nMeasurements+nControls,(N_MHE+1)+1+k: (N_MHE+1)+1+nControls*k);
-%             end
-%         end
+        function obj=bufferInitialData(obj, newY, newU)
+            if obj.yBufferCount > obj.N_MHE + 1 && obj.uBufferCount > obj.N_MHE
+                % Indicate that the system is ready to start running the MHE
+                obj.isReadyToRun = true;
+                return
+            end
+            
+            
+            
+            %Buffer new measurement
+            if obj.yBufferCount <= obj.N_MHE + 1 && ~isempty(newY)
+                obj.P(obj.nStates + 1:obj.nStates + obj.nMeasurements, obj.yBufferCount + 1) = newY;
+                obj.beq(obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.yBufferCount-1)+1 : obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.yBufferCount)) = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, obj.yBufferCount+1);
+                obj.yBufferCount=obj.yBufferCount+1;
+            end
+            if obj.uBufferCount <= obj.N_MHE && ~isempty(newU)
+                obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+obj.uBufferCount)=newU;
+                obj.beq(obj.nStates*obj.uBufferCount-1 : obj.nStates*obj.uBufferCount) = obj.z0block + obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,(obj.N_MHE+1)+1+obj.uBufferCount: (obj.N_MHE+1)+1+obj.nControls*obj.uBufferCount);
+                obj.uBufferCount=obj.uBufferCount+1;
+            end
+            %^ A biproduct of this solution is that the bufferCount's will
+            %always be one more after its finished than the stopping value
+            %because after the last iteration it increases once more.
+            
+        end
+        
+        
+        function obj=runMHE(obj,newY,newU)
+            %solve opt problem, currently only extracting zOpt
+            [zOpt, ~, ~, ~,~,~] = qpOASES(2*obj.G, obj.g, obj.Aeq, -100000000*ones(length(z),1), 100000000*ones(length(z),1), obj.beq, obj.beq,nWSR);
+            obj.xCurrent = zOpt(obj.nStates*obj.N_MHE + 1 : obj.nStates*(obj.N_MHE + 1));  % Extract and store X_N
+            
+            %Shift measurement window
+            obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2:obj.N_MHE+2)=[obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 3:obj.N_MHE+2),newY]; 
+    
+            %Shift control input window
+            P(nStates+nMeasurements+1:nStates+nMeasurements+nControls,1+(N_MHE+1)+1:1+(N_MHE+1)+N_MHE)=[P(nStates+nMeasurements+1:nStates+nMeasurements+nControls,1+(N_MHE+1)+1+1:1+(N_MHE+1)+N_MHE),U_list(k+N_MHE)]; 
+
+        end
     end
 
 end

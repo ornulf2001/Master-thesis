@@ -7,7 +7,7 @@ x0_sim = [0;0];
 dt=0.01;
 T_sim = 0:dt:10; 
 
-U_list = 0.5*ones(length(T_sim),1); % Constant force input
+U_list = 0:dt:10;%0.5*ones(length(T_sim),1); % Constant force input
 X_sim = zeros(length(x0_sim), length(T_sim)); % State storage
 X_sim(:,1) = x0_sim; % Initial state
 Ad=expm(Ac*dt);
