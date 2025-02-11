@@ -1,15 +1,16 @@
 clc,clear
-addpath ("C:\Users\ornul\AppData\Roaming\MathWorks\CasADi")
+addpath ("C:\Users\ornul\AppData\Roaming\MathWorks\CasADi")                   % Add path to CasADi
+addpath ("C:\Users\ornul\Desktop\Kyb master\MASTER\qpOASES\interfaces\matlab")% Add path to qpOAses
 import casadi.*
 
 %Run msd simulation
 run("msd_sim.m")
 
 
-% Defining misc
-N_MHE = 1;
-nStates = size(A,1);
-nControls = size(B,2);
+% Defining misc.
+N_MHE = 10;
+nStates = size(Ac,1);
+nControls = size(Bc,2);
 nMeasurements=size(C,1);
 z0_block=zeros(nStates,1);
 
@@ -17,15 +18,16 @@ z0_block=zeros(nStates,1);
 X = SX.sym('X', nStates, N_MHE+1); %states
 W = SX.sym('W', nStates, N_MHE); %Process noise
 V = SX.sym('V', nMeasurements, N_MHE+1); %Measurement noise
+z = [reshape(X, nStates*(N_MHE+1), 1);reshape(W, nStates*(N_MHE), 1);reshape(V, nMeasurements*(N_MHE+1), 1)];
+%^ z=[x0,z0,...thetadot0,...,xN,zN,...,thetadotN,   ux0,uz0,...,uxN-1,uzN-1 
+% ,  w0,...wN-1,   v0,...,vN]
+
 
 P = zeros( nStates+nMeasurements+nControls, 1+(N_MHE+1)+N_MHE); 
-P(1:nStates,1)=x0_sim;
 % %^ Parameters. Include the prior estimate x_(k-1) and N_MHE+1 y
 % measurements (x,z,theta)_k and the previous control input u_(k-1).
 
-z=[reshape(X, nStates*(N_MHE+1), 1);reshape(W, nStates*(N_MHE), 1);reshape(V, nMeasurements*(N_MHE+1), 1)];
-%^ z=[x0,z0,...thetadot0,...,xN,zN,...,thetadotN,   ux0,uz0,...,uxN-1,uzN-1 
-% ,  w0,...wN-1,   v0,...,vN]
+
  
 
 %meas_cov = diag(1); %, 0.01^2, deg2rad(3)^2]);            %noise covariance on measurements
@@ -35,15 +37,18 @@ z=[reshape(X, nStates*(N_MHE+1), 1);reshape(W, nStates*(N_MHE), 1);reshape(V, nM
 %L_x = chol(proc_cov, 'lower'); Q = L_x \eye(size(L_x));  
 %L_M = chol(arrival_cov, 'lower'); M = L_M\eye(size(L_M));
 
-R=0.01;
-Q=diag([0.3,0.3]);
-M=diag([0.1,0.1]);
+R=0.003;
+Q=diag([0.3,3]);
+M=diag([0.05,0.03]);
 %^ To surpress noise: Lower R
 
 % Discretization %
 dt=0.01;
-A=expm(A*dt);
-B=inv(A) * (expm(A*dt) - eye(size(A))) * B;
+A=expm(Ac*dt);
+B=inv(Ac) * (A - eye(size(Ac))) * Bc;
+
+
+
 Q=dt*Q;
 R=dt*R;
 M=dt*M;
@@ -80,67 +85,20 @@ for k=0:N_MHE
     Aeq(nStates*N_MHE+nMeasurements*k+1 : nStates*N_MHE+nMeasurements*(k+1),  nStates*(N_MHE+1)+nStates*(N_MHE)+nMeasurements*k+1 : nStates*(N_MHE+1)+nStates*(N_MHE)+nMeasurements*(k+1)) = eye(nMeasurements);
 end
 
-
+runtime=zeros(size(Y_noisy,2)-(N_MHE+1),1);
+xsol=zeros(nStates,size(Y_noisy,2)-(N_MHE+1));
 %%%%%%%%%%%%%%%%% Solver settings and setup %%%%%%%%%%%%%%%%%%%%%%
 
-%Initialization, fill up the first horizon of measurements and control inputs
-nWSR=1000; %Max iterations
+
+run("init_mhe.m")
 
 
-for k=1:N_MHE+1 %Fill up first horizon of measurements before loop in P and then in beq
-    P(nStates+1:nStates+nMeasurements, k+1)=Y_noisy(k);
-    beq(nStates*N_MHE+nMeasurements*(k-1)+1 : nStates*N_MHE+nMeasurements*(k)) = P(nStates+1:nStates+nMeasurements, k+1);
+mhe=MHEclass(N_MHE,Ac,Bc,C,z0_block,x0_sim,dt);
 
-end
-for k=1:N_MHE %Fill up first horizon-1 of control inputs applied in P and then in beq
-    P(nStates+nMeasurements+1:nStates+nMeasurements+nControls,1+(N_MHE+1)+k)=U_list(k);
-    beq(nStates*k-1 : nStates*(k)) = z0_block + B*P(nStates+nMeasurements+1:nStates+nMeasurements+nControls,(N_MHE+1)+1+k: (N_MHE+1)+1+nControls*k);
-end
-
-xsol=[];
-for k=1:size(Y_noisy,2)-(N_MHE+1)
-
-[zOpt, fval, exitflag, iterations,lambda,auxOutput] = qpOASES(2*G, g, Aeq, -100000000*ones(length(z),1), 100000000*ones(length(z),1), beq, beq,nWSR); %Solve
-xCurrent = zOpt(nStates*N_MHE + 1 : nStates*(N_MHE + 1));  % Extract and store X_N
-xsol = [xsol, xCurrent];
-P(1:nStates, 1) = xCurrent; % Update xprior for next iteration
-
-%Shift measurement window
-P(nStates+1:nStates+nMeasurements, 2:N_MHE+2)=[P(nStates+1:nStates+nMeasurements, 3:N_MHE+2),Y_noisy(N_MHE+1+k)]; 
-
-%Shift control input window
-P(nStates+nMeasurements+1:nStates+nMeasurements+nControls,1+(N_MHE+1)+1:1+(N_MHE+1)+N_MHE)=[P(nStates+nMeasurements+1:nStates+nMeasurements+nControls,1+(N_MHE+1)+1+1:1+(N_MHE+1)+N_MHE),U_list(k+N_MHE)]; 
-
-%update the C*Xk + Vk = Ymeas,k constraint in beq with new measurement
-beq(nStates*N_MHE+1 : nStates*N_MHE+nMeasurements*(N_MHE+1)) = P(nStates+1:nStates+nMeasurements, 2:N_MHE+2); 
-
-%Update dynamics constraint with new control input in beq
-beq(1:nStates*N_MHE) = [beq(1+nStates:nStates*N_MHE) ; z0_block + B*P(nStates+nMeasurements+1:nStates+nMeasurements+nControls,(N_MHE+1)+1+nControls*N_MHE)]; 
-
-% Update arrival cost with new xprior
-g_X(1:nStates)=-2*M*P(1:nStates,1);
-g = [g_X; g_W; g_V];
-end
+classAeq=mhe.Aeq;
+classbeq=mhe.beq;
+isequal(classbeq,beq)
+%run("run_mhe.m")
+%run("plotting.m")
 
 
-
-%%%%%%%% Plotting %%%%%%%%%
-figure(1)
-%plot(Y_noisy(1,N_MHE+1:end),"k") 
-hold on
-plot(xsol(1,:),"r"); hold on
-plot(Y_sim(1,N_MHE+1:end),"b")
-title("Estimated position. N: "+num2str(N_MHE)+", R: "+num2str(round(R,3))+", Q: "+mat2str(round(Q,3))+", M: "+mat2str(round(M,3)))
-grid on
-legend([ "est.","sim"])
-xlabel("Time")
-ylabel("x1")
-
-figure(2)
-plot(xsol(2,:)) 
-hold on
-plot(X_sim(2,N_MHE+1:end))
-legend(["est.","sim"])
-title("Estimated velcocity")
-xlabel("Time")
-ylabel("x2")
