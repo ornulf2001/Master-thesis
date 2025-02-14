@@ -8,7 +8,7 @@ run("msd_sim.m")
 
 
 % Defining misc.
-N_MHE = 4;
+N_MHE = 8;
 nStates = size(Ac,1);
 nControls = size(Bc,2);
 nMeasurements=size(C,1);
@@ -19,39 +19,13 @@ X = SX.sym('X', nStates, N_MHE+1); %states
 W = SX.sym('W', nStates, N_MHE); %Process noise
 V = SX.sym('V', nMeasurements, N_MHE+1); %Measurement noise
 z = [reshape(X, nStates*(N_MHE+1), 1);reshape(W, nStates*(N_MHE), 1);reshape(V, nMeasurements*(N_MHE+1), 1)];
-%^ z=[x0,z0,...thetadot0,...,xN,zN,...,thetadotN,   ux0,uz0,...,uxN-1,uzN-1 
-% ,  w0,...wN-1,   v0,...,vN]
-
-
 P = zeros( nStates+nMeasurements+nControls, 1+(N_MHE+1)+N_MHE); 
-% %^ Parameters. Include the prior estimate x_(k-1) and N_MHE+1 y
-% measurements (x,z,theta)_k and the previous control input u_(k-1).
-
 
  
+R=0.001;
+Q=diag([1,1]);
+M=diag([1,1]);
 
-%meas_cov = diag(1); %, 0.01^2, deg2rad(3)^2]);            %noise covariance on measurements
-%proc_cov=diag([0.3,0.3]);%, deg2rad(2)^2, 0.05^2, 0.05^2, deg2rad(2)^2]); %noise covariance on control input
-%arrival_cov=diag([0.1, 0.1]);% deg2rad(2)^2, 0.05^2, 0.05^2, deg2rad(2)^2]); %Arrival cost covariance
-%L_y = chol(meas_cov,'lower'); R = L_y \ eye(size(L_y));     %These give R and Q as weight matrices for y and u resp. V=inv(sqrt(meas_cov)) W=...
-%L_x = chol(proc_cov, 'lower'); Q = L_x \eye(size(L_x));  
-%L_M = chol(arrival_cov, 'lower'); M = L_M\eye(size(L_M));
-
-R=0.003;
-Q=diag([0.3,3]);
-M=diag([0.05,0.03]);
-%^ To surpress noise: Lower R
-
-% Discretization %
-dt=0.01;
-A=expm(Ac*dt);
-B=inv(Ac) * (A - eye(size(Ac))) * Bc;
-
-
-
-Q=dt*Q;
-R=dt*R;
-M=dt*M;
 
 % Cost function quadratic terms
 cost_X_block = blkdiag(M,zeros(nStates*N_MHE));
@@ -85,24 +59,43 @@ for k=0:N_MHE
     Aeq(nStates*N_MHE+nMeasurements*k+1 : nStates*N_MHE+nMeasurements*(k+1),  nStates*(N_MHE+1)+nStates*(N_MHE)+nMeasurements*k+1 : nStates*(N_MHE+1)+nStates*(N_MHE)+nMeasurements*(k+1)) = eye(nMeasurements);
 end
 
-runtime=zeros(size(Y_noisy,2)-(N_MHE+1),1);
 xsol=zeros(nStates,size(Y_noisy,2)-(N_MHE+1));
-%%%%%%%%%%%%%%%%% Solver settings and setup %%%%%%%%%%%%%%%%%%%%%%
+iter_reg=0;
+zs=[];
+
+%Buffer and run regular MHE
+%run("init_mhe.m")
+
+%run("run_mhe.m")
 
 
-run("init_mhe.m")
 
 
-mhe=MHEclass(N_MHE,Ac,Bc,C,z0_block,x0_sim,dt);
-%class init
+%%%%%%%%%%%%%% Class version of MHE %%%%%%%%%%%%%%%%%%
 
+mhe=MHEclass(N_MHE,Ac,Bc,C,Q,R,M,z0_block,x0_sim,dt);
+iter_class=0;
+
+%Buffer first horizon of measurements and control inputs
 while ~mhe.isReadyToRun
     newY=Y_noisy(mhe.yBufferCount);
     newU=U_list(mhe.uBufferCount);
     mhe=mhe.bufferInitialData(newY, newU);
 end
 
-%run("run_mhe.m")
-%run("plotting.m")
+
+% Run class version of MHE
+xsol2=zeros(nStates,size(Y_noisy,2)-(N_MHE+1));
+ for k=1:size(Y_noisy,2)-(N_MHE+1)
+     newY=Y_noisy(:,N_MHE+1+k);
+     newU=U_list(N_MHE+k,:);
+     mhe=mhe.runMHE(newY,newU);
+     xsol2(:,k)=mhe.xCurrent;
+     iter_class=iter_class+1;
+     
+ end
+ 
+
+run("plotting.m")
 
 
