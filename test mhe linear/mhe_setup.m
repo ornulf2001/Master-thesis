@@ -39,6 +39,9 @@ P = SX.sym('P', nStates+nMeasurements, 1+(N_MHE+1));
 
 
 x_prior=P(1:nStates,1);
+x_prior=zeros(size(x_prior));
+
+
 for k = 1:(N_MHE+1)
     V(:,k) = P(nStates+1:end, k+1) - (C*X(:,k)); %+D*U(:,k)); % v_k = y_meas,k - h(x_k)
 end
@@ -67,7 +70,7 @@ g_U = zeros(nControls * N_MHE, 1); % No linear terms for U, W, or V
 g_W = zeros(nStates * N_MHE, 1);
 g_V = zeros(nMeasurements * (N_MHE + 1), 1);
 g = [g_X; g_U; g_W; g_V];
-
+g_num=full(g);
 %Construct objective function
 obj = z'*G*z + g'*z;
 
@@ -76,18 +79,14 @@ obj = z'*G*z + g'*z;
 rows_Aeq= N_MHE*nStates;
 cols_Aeq= (N_MHE+1)*nStates + N_MHE*nControls + N_MHE*nStates + (N_MHE+1)*nMeasurements;
 Aeq=zeros(rows_Aeq,cols_Aeq);
-b_eq = zeros(N_MHE * nStates, 1);
-
-% Compute z_0 offset contribution for z-dynamics
-
-
+beq = zeros(N_MHE * nStates, 1);
 for k=0:N_MHE-1
     Aeq(nStates*k+1     :   nStates*(k+1), nStates*k+1                                        :   nStates*(k+1))=-A; %Placeholder identities for A_k on blockdiagonal
     Aeq(nStates*k+1     :   nStates*(k+1), nStates*(k+1)+1                                    :   nStates*(k+1+1))=eye(nStates); %Identities on super-blockdiagonal
     Aeq(nStates*k+1     :   nStates*(k+1), nStates*(N_MHE+1)+nControls*k+1                    :   nStates*(N_MHE+1)+nControls*(k+1)) = -B;
     Aeq(nStates*k+1     :   nStates*(k+1), nStates*(N_MHE+1)+nControls*(N_MHE)+nStates*k+1    :   nStates*(N_MHE+1)+nControls*(N_MHE)+nStates*(k+1)) = -eye(nStates);
     
-    b_eq(nStates * k + 1 : nStates * (k + 1)) = z0_block;
+    beq(nStates * k + 1 : nStates * (k + 1)) = z0_block;
 end
 
 
@@ -97,44 +96,38 @@ full_Aeq=full(Aeq);
 disp("yay")
 
 
+%%%%%%%%%%%%%%%%% Solver settings and setup %%%%%%%%%%%%%%%%%%%%%%
 
-% % MHE solver setup 
-% OPT_variables = [reshape(X, 3*(N_MHE+1), 1); reshape(U, 2*N_MHE, 1)];
-% nlp_mhe = struct('f', obj, 'x', OPT_variables, 'g', g, 'p', P);
-% 
-% opts = struct();
-% opts.ipopt.max_iter = 2000;
-% opts.ipopt.print_level = 0; %0, 3
-% opts.print_time = 0;
-% opts.ipopt.acceptable_tol = 1e-8;
-% opts.ipopt.acceptable_obj_change_tol = 1e-6;
-% 
-% solver = nlpsol('solver', 'ipopt', nlp_mhe, opts);
-% 
-% args = struct();
-% args.lbg(1:3*(N_MHE)) = 0; % equality constraints
-% args.ubg(1:3*(N_MHE)) = 0; % equality constraints
-% 
-% args.lbx(1:3:3*(N_MHE+1), 1) = -2; % state x lower bound
-% args.ubx(1:3:3*(N_MHE+1), 1) = 2;  % state x upper bound
-% args.lbx(2:3:3*(N_MHE+1), 1) = -2; % state y lower bound
-% args.ubx(2:3:3*(N_MHE+1), 1) = 2;  % state y upper bound
-% args.lbx(3:3:3*(N_MHE+1), 1) = -pi/2; % state theta lower bound
-% args.ubx(3:3:3*(N_MHE+1), 1) = pi/2;  % state theta upper bound
-% 
-% args.lbx(3*(N_MHE+1)+1:2:3*(N_MHE+1)+2*N_MHE, 1) = vMin; % v lower bound
-% args.ubx(3*(N_MHE+1)+1:2:3*(N_MHE+1)+2*N_MHE, 1) = vMax; % v upper bound
-% args.lbx(3*(N_MHE+1)+2:2:3*(N_MHE+1)+2*N_MHE, 1) = omegaMin; % omega lower bound
-% args.ubx(3*(N_MHE+1)+2:2:3*(N_MHE+1)+2*N_MHE, 1) = omegaMax; % omega upper bound
-% 
-% 
-% 
-% 
-function data = getParams()
-    persistent params
+% Define bounds for decision variables
+lbx = -inf(size(z)); % Default to no lower bounds
+ubx = inf(size(z));  % Default to no upper bounds
 
-    if isempty(params)
-        parameters;
-    end
-    data = params;
+% Apply bounds to states (e.g., state limits)
+for k = 0:N_MHE
+    lbx(nStates*k+1:nStates*(k+1)) = [-2; -2; -pi/2; -10; -10; -pi]; % Example lower bounds
+    ubx(nStates*k+1:nStates*(k+1)) = [ 2;  2;  pi/2;  10;  10;  pi]; % Example upper bounds
 end
+
+% Apply bounds to controls (e.g., actuator limits)
+for k = 0:N_MHE-1
+    lbx((N_MHE+1)*nStates + nControls*k+1 : (N_MHE+1)*nStates + nControls*(k+1)) = [-0.6; -0.6]; % Lower bounds
+    ubx((N_MHE+1)*nStates + nControls*k+1 : (N_MHE+1)*nStates + nControls*(k+1)) = [ 0.6;  0.6]; % Upper bounds
+end
+
+
+opts = struct;
+opts.qpsol = 'qpoases'; % Use qpOASES as the solver
+
+% qpOASES-specific options
+opts.qpsol_options.print_level = 'none';       % Suppress solver output (verbosity)
+opts.qpsol_options.tol_stat = 1e-6;            % Stationarity tolerance
+opts.qpsol_options.tol_eq   = 1e-6;            % Equality constraint tolerance
+opts.qpsol_options.tol_ineq = 1e-6;            % Inequality constraint tolerance
+opts.qpsol_options.tol_comp = 1e-6;            % Complementarity tolerance
+opts.qpsol_options.max_iter = 100;             % Maximum number of iterations
+%solver = qpsol('solver', 'qpoases', struct('x', z, 'f', obj, 'A', Aeq, 'lba', b_eq, 'uba', b_eq));
+
+nWSR = 1000;
+tic
+[xOpt, fval, exitflag, iterations,lambda,auxOutput] = qpOASES(2*G, g, Aeq, -100000000*ones(length(z),1), 100000000*ones(length(z),1), beq, beq,nWSR);
+toc

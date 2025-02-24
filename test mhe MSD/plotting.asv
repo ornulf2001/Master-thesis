@@ -34,7 +34,6 @@ xlabel("Time")
 ylabel("theta")
 
 figure(4)
-hold on; grid on;
-plot(xsol2(1,:),xsol2(2,:))
-xlabel("x")
-ylabel("z")
+hold on; grid on
+plot(xsol2(1,:))
+plot(xsol2(2,:))

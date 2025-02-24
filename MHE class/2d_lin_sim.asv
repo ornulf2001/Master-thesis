@@ -1,0 +1,34 @@
+clc,clear
+
+dt=0.005;
+T_sim = 0:dt:3; 
+N_MHE=5;
+
+%z0=0.0365;
+%params=getParams();
+%[Ac,Bc,z0block]=f_func_lin(z0,params);
+
+%Measurement model
+% C=[1,0,0,0,0,0;
+%    0,1,0,0,0,0;
+%    0,0,1,0,0,0];
+
+A=expm(Ac*dt);
+B=inv(Ac) * (A - eye(size(Ac))) * Bc;
+
+x0_sim=[0.01;0.04;0.001;0;0;0];
+xref = [0;z0;0;0;0;0];
+X_sim = zeros(length(x0_sim), length(T_sim)); % State storage
+X_sim(:,1) = x0_sim; % Initial state
+u = zeros(size(B,2),length(T_sim));
+
+Qk = diag([10,10,10,1,1,1]);
+Rk = diag([0.01,0.01]);
+[K,~,~]  = dlqr(A,B,Qk,Rk);
+
+%Buffer to find u's for first horizon using sim only
+for k=1:length(T_sim)
+    X_sim(:, k+1)=A*X_sim(:, k)+B*(-K*(X_sim(:,k)-xref))+z0block;
+end
+%plot(X_sim(1,:),X_sim(2,:)) % 2D- position plot? Z vs X
+plot(X_sim(2,:))

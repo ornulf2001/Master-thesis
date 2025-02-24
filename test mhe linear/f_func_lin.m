@@ -1,4 +1,4 @@
-function [A,B,z0_block] = f_func_lin(z0, params,nStates)
+    function [A,B,z0_block] = f_func_lin(z0, params,nStates)
 M=params.magnet.m;
 J=params.magnet.I(1);
 mu0=params.physical.mu0;

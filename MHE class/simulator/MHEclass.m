@@ -1,10 +1,7 @@
 classdef MHEclass
     
     properties
-        CasADiPath      %Path to CasADi library
         N_MHE           %Horizon length #timesteps
-        states          %States in dynamical model
-        controls        %Controls in dynamical model
         nStates         %Number of states
         nControls       %Number of control inputs
         nMeasurements   %Number of measurements
@@ -22,10 +19,8 @@ classdef MHEclass
         g               %QP cost vector for linear terms
         Aeq             %QP equality constraint matrix for z, Aeq*z=beq
         beq             %QP equality constraint vector for constant terms
-        f               %function: Nonlinear dynamical model, x_{k+1} = f(x_k, u_k) + w_k
-        h               %function: Nonlinear measurement model y_k = h(x_k, u_k) + v_k
-        A_lin_func      %function: Linearize nonlinear dynamical model to get Ac
-        B_lin_func      %function: -------------||-------------------- to get Bc
+        f               %Nonlinear dynamical model, x_{k+1} = f(x_k, u_k) + w_k
+        h               %Nonlinear measurement model y_k = h(x_k, u_k) + v_k
         x0              %Initial condition for states
         xprior          %Prior for states (initial condition or previous state estimate)
         xCurrent        %Current state estimate, xk
@@ -38,16 +33,14 @@ classdef MHEclass
         nWSR            %Max iterations for QP solver
         fileID          %File ID for logging to file
         open            %Boolean, log file open for write or not
-        o
+        
     end
     
     methods
-        function obj = MHEclass(N_MHE,states, controls, Ac, Bc, C,Q,R,M,z0block, x0, dt, CasADiPath,f,h)
+        function obj = MHEclass(N_MHE, Ac, Bc, C,Q,R,M,z0block, x0, dt)
             
             %Assigning arguments to class properties
             obj.N_MHE = N_MHE;
-            obj.states=states;
-            obj.controls=controls;
             obj.Ac = Ac;
             obj.Bc = Bc;
             obj.Q=Q;
@@ -60,11 +53,7 @@ classdef MHEclass
             obj.nStates= size(Ac,1);
             obj.nControls = size(Bc,2);
             obj.nMeasurements=size(C,1);
-            obj.CasADiPath=CasADiPath;
-            addpath(obj.CasADiPath);
-            import casadi.*
-            obj.f=f;
-            obj.h=h;
+           
             % Solver options
             obj.nWSR=1000;            
             % running setup
@@ -202,23 +191,15 @@ classdef MHEclass
             
             %Integrating x0 over the first horizon before MHE starts
             x_propagated = obj.x0;
-
-            for i = 0:obj.N_MHE-1
-                %Add functionality to get linearized A0, B0 based on x0, then
-                %subsequent steps here we linearize around x_propagated and
-                %fill up the first A and B blocks in Aeq
-                [newA,newB]=linearizeDynamics(x_propagated);
-                obj.Aeq(obj.nStates*k+1 : obj.nStates*(k+1), obj.nStates*k+1 : obj.nStates*(k+1)) = -newA;
-
-
-                x_propagated = obj.A * x_propagated + obj.B * obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+i+1);
+            for i = 1:obj.N_MHE
+                x_propagated = obj.A * x_propagated + obj.B * obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+i);
             end
             obj.P(1:obj.nStates, 1) = x_propagated; %Update P with the propagated initial condition
             g_X(1:obj.nStates)=-2*obj.M*obj.P(1:obj.nStates,1); %Update g in cost function with the propagated initial condition
             obj.g(1:obj.nStates)=g_X(1:obj.nStates);
         end
         
-        function obj=runMHE(obj,newY,newU,newA,newB)
+        function obj=runMHE(obj,newY,newU)
             
             %solve opt problem, currently only extracting zOpt
             [zOpt, ~, ~, ~,~,~] = qpOASES(2*obj.G, obj.g, obj.Aeq, [],[], obj.beq, obj.beq,[]);
@@ -236,15 +217,11 @@ classdef MHEclass
             %Shift control input window with new control input
             obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE)=[obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1+1:1+(obj.N_MHE+1)+obj.N_MHE),newU]; 
             
-            %%%%% SHIFT A and B in Aeq %%%%%%%
-            %Not finished
-
             %update the C*Xk + Vk = Ymeas,k constraint with new measurement in beq
             obj.beq(obj.nStates*obj.N_MHE+1 : obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.N_MHE+1)) = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2:obj.N_MHE+2); 
 
             %Update dynamics constraint with new control input in beq
             obj.beq(1:obj.nStates*obj.N_MHE)=reshape(obj.z0block+obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE),obj.nStates*obj.N_MHE,1);
-
         end
         
         function obj = reset(obj, newx0)
@@ -255,35 +232,59 @@ classdef MHEclass
             obj = obj.setup();  % Reinitialize the matrices if necessary
         end
         
-        
+        function obj=rhs(obj,states,controls,params)
+            x=states(1); z=states(2); theta=states(3);
+            ux=controls(1); uz=controls(2);
 
-
-        function [A_lin,B_lin] = linearizeDynamics(obj, xk)
-            import casadi.*
-            % Linearize the dynamics around the current state estimate xk
-            % Here, xk should be a numerical value
+            %params 
+            mu0=params.physical.mu0;
+            gr=params.physical.g;
             
-            % Calculate the Jacobian symbolically if not already done
-            if isempty(obj.A_lin_func)
-                % Assume obj.f is defined as Function('f', {states, controls}, {rhs});
-                %states = SX.sym('states', obj.nStates, 1);
-                %controls = SX.sym('controls', obj.nControls, 1);
-        
-                % Compute the Jacobian symbolically with respect to states
-                jac_A = jacobian(obj.f(obj.states, obj.controls), obj.states);
-                jac_B = jacobian(obj.f(obj.states, obj.controls), obj.controls);
-        
-                % Create a CasADi function to evaluate these Jacobians
-                obj.A_lin_func = Function('A_lin', {obj.states, obj.controls}, {jac_A});
-                obj.B_lin_func = Function('B_lin', {obj.states, obj.controls}, {jac_B});
-            end
-        
-            % Evaluate the Jacobian at the current state and control estimate
-            % Assuming xk includes state and control info or pass them separately if needed
-            size(xk)
-            obj.nStates
-            A_lin = full(obj.A_lin_func(xk(1:obj.nStates), xk(obj.nStates+1:end)));
-            B_lin = full(obj.B_lin_func(xk(1:obj.nStates), xk(obj.nStates+1:end)));
+            Rad=params.solenoids.x(1); %Avstand fra nullpunkt til solenoid
+            rl=params.magnet.r; %Radius svevemagnet
+            rp=params.permanent.r(1); %Radius permanent magnet
+            ll=params.magnet.l; %Lengde svevemagnet
+            lp=params.permanent.l(1); %Lengde permanent magnet
+            
+            mass=params.magnet.m; %Mass
+            J=params.magnet.I(1); %Moment of inertia
+            ml = abs(params.magnet.J)*pi*rl^2*ll/mu0; % magnetisk moment svevemagnet
+            m = abs(params.permanent.J)*pi*rp^2*lp/mu0; % magnetisk moment permanent magnet
+            ml=[0;0;ml];
+            
+            % hybridmagneter
+            Ip = (ux + uz)/2; %Strøm positiv hybrid magnet
+            In = (uz - ux)/2; %Strøm negativ hybrid magnet
+            mp= (m+mu0*Ip).*[sin(theta);0;-cos(theta)];
+            mn= (m+mu0*In).*[sin(theta);0;-cos(theta)];
+            rn = [x - Rad*cos(theta);
+                  0;
+                  z - Rad*sin(theta)];
+            rp = [x + Rad*cos(theta);
+                  0;
+                  z + Rad*sin(theta)];
+            
+            %Magnetisk skalarpotensiale, Phi
+            phi=mu0/(4*pi) * (dot(mp,rp)/norm(rp)^3 + dot(mn,rn)/norm(rn)^3);
+            
+            dphi_dx = jacobian(phi, x);
+            d2phi_dxdz = jacobian(dphi_dx, z);
+            dphi_dz = jacobian(phi, z);
+            d2phi_dz2 = jacobian(dphi_dz, z);
+            
+            xddot = -(ml/mass) * d2phi_dxdz;
+            zddot = -(m/mass) * d2phi_dz2 - gr;
+            thetaddot = -(ml/J) * dphi_dx;
+            
+            rhs=[xddot;zddot;thetaddot];
+            obj.f=Function("f",{states,controls},rhs);
+        end
+
+
+        function obj=linearizeDynamics(obj)
+            
+            %Linearize dynamics around current state estimate xCurrent
+            obj.Ac=jacobian(obj.f);
         end
         
     end
