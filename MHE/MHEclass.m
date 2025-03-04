@@ -5,7 +5,6 @@ classdef MHEclass
         nStates         %Number of states
         nControls       %Number of control inputs
         nMeasurements   %Number of measurements
-        z0block         %Constant term in 2D linearized maggy model
         Ac              %Continuous time system matrix, A
         Bc              %Continuous time control matrix, B
         A               %Discrete time system matrix, A
@@ -35,7 +34,7 @@ classdef MHEclass
     end
     
     methods
-        function obj = MHEclass(N_MHE, Ac, Bc, C,Q,R,M,z0block, x0, dt,options)
+        function obj = MHEclass(N_MHE, Ac, Bc, C,Q,R,M, x0, dt,options)
             
             %Assigning arguments to class properties
             obj.N_MHE = N_MHE;
@@ -44,7 +43,6 @@ classdef MHEclass
             obj.Q=Q;
             obj.R=R;
             obj.M=M;
-            obj.z0block=z0block;
             obj.C = C;
             obj.dt = dt;
             obj.x0 = x0;
@@ -128,7 +126,7 @@ classdef MHEclass
             %Buffer new control input
             if obj.uBufferCount <= obj.N_MHE && ~isempty(newU)
                 obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+obj.uBufferCount)=newU;
-                obj.beq(obj.nStates*(obj.uBufferCount-1)+1 : obj.nStates*obj.uBufferCount) = obj.z0block + obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,(obj.N_MHE+1)+1+obj.uBufferCount);
+                obj.beq(obj.nStates*(obj.uBufferCount-1)+1 : obj.nStates*obj.uBufferCount) =  obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,(obj.N_MHE+1)+1+obj.uBufferCount);
                 obj.uBufferCount=obj.uBufferCount+1;
             end
             %^ A biproduct of this solution is that the bufferCounts will
@@ -174,7 +172,7 @@ classdef MHEclass
             obj.beq(obj.nStates*obj.N_MHE+1 : obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.N_MHE+1)) = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2:obj.N_MHE+2); 
 
             %Update dynamics constraint with new control input in beq
-            obj.beq(1:obj.nStates*obj.N_MHE)=reshape(obj.z0block+obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE),obj.nStates*obj.N_MHE,1);
+            obj.beq(1:obj.nStates*obj.N_MHE)=reshape(obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE),obj.nStates*obj.N_MHE,1);
         end
         
         function obj = reset(obj, newx0)

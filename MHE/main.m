@@ -19,7 +19,6 @@ D=0;
 dt=0.002;
 X0=[0.001;0.003;00.003;0;0;0];
 %[z0block,C,D,T_sim,U_list,X_sim,Y_sim,Y_noisy]=sim_2d(dt,X0,T_END,params,Ac,Bc);
-z0block=zeros(size(Ac,1),1);
 %%%%%%%% Setup %%%%%%%%%
 
 % Sizes
@@ -76,7 +75,7 @@ ub = [ubX; ubU];
 
 %%%%%%%%% Run  %%%%%%%%%%
 MHE_options = optimoptions("quadprog","Display","off", "Algorithm","interior-point-convex");
-mhe = MHEclass(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,z0block,X0,dt,MHE_options);
+mhe = MHEclass(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,X0,dt,MHE_options);
 
 MPC_options = optimset('Display','on', 'Diagnostics','on', 'LargeScale','off', 'Algorithm', 'interior-point-convex');
 mpc = MPCclass(N_MPC, Ac, Bc, X0, dt, lb, ub, Q_MPC, R_MPC, QN_MPC, nStates, nControls,MPC_options);
