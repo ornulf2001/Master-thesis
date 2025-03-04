@@ -23,18 +23,18 @@ nMeasurements = size(C,1);
 X0=[0;0;0;0;0;0];
 NT=600;
 
-N_MHE=18;
-N_MPC=80;
-dt=0.003;
+N_MHE=8;
+N_MPC=30;
+dt=0.002;
 
-R_MHE=2*dt*diag([0.3,0.3,0.3]);
-Q_MHE=2*diag([1,1,0.1,1,1,0.01]);
-M_MHE=2*diag([1,1,100,3,3,100]);
-noise_cov=0.3;
+R_MHE=1*dt*diag([0.1,0.1,0.1]);
+Q_MHE=diag([1,1,1,1,1,1]);
+M_MHE=0.2*diag([1,1,1,3,3,3]);
+noise_cov=0.05;
 
-Q_MPC = diag([50 10 50 0.1 0.1 0.1]);
-QN_MPC =300*Q_MPC;
-R_MPC = diag([0.001 0.01]);
+Q_MPC = diag([50 300 50 0.1 0.5 0.3]);
+QN_MPC =1000*Q_MPC;
+R_MPC = diag([0.05 0.001]);
 
 %Bounds
 run("mpc_bounds.m")
@@ -43,7 +43,7 @@ run("mpc_bounds.m")
 MHE_options = optimoptions("quadprog","Display","off", "Algorithm","interior-point-convex");
 mhe = MHEclass(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,X0,dt,MHE_options);
 
-MPC_options = optimset('Display','on', 'Diagnostics','on', 'LargeScale','off', 'Algorithm', 'interior-point-convex');
+MPC_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'interior-point-convex');
 mpc = MPCclass(N_MPC, Ac, Bc, X0, dt, lb, ub, Q_MPC, R_MPC, QN_MPC, nStates, nControls,MPC_options);
 MPC_Xopt = zeros(nStates, NT);
 MPC_Uopt = zeros(nControls, NT);
@@ -55,9 +55,9 @@ newU=[0;0];
 MPC_Xopt(:, 1) = X0;
 xCurrent = X0;
 
-for k=1:NT-1
+for k=1:NT
+    tic
     k
-    
     mhe=mhe.runMHE(newY,newU);
     xEst=mhe.xCurrent;
     MHE_est(:,k)=mhe.xCurrent;
@@ -68,16 +68,14 @@ for k=1:NT-1
         MPC_Uopt(:,k) = U;
         newU=MPC_Uopt(:,k);
 
-    elseif k>20 && k<30
-        U=[-1;-10];
+    elseif k>=20 && k<22
+        U=[-5;-13];
         MPC_Xopt(:,k+1) = mpc.A*MPC_Xopt(:,k) + mpc.B*U;
         xCurrent = MPC_Xopt(:,k+1);
         MPC_Uopt(:,k) = U;
         newU=MPC_Uopt(:,k);
-
     else
-        xCurrent-xEst
-        [xNext, Uopt]=mpc.runMPC(xCurrent);
+        [xNext, Uopt]=mpc.runMPC(xEst);
         MPC_Xopt(:,k+1) = xNext;
         MPC_Uopt(:,k)= Uopt;
         xCurrent=xNext;
@@ -86,16 +84,9 @@ for k=1:NT-1
 
     yCurrent(:,k+1) = C*xCurrent + noise_cov*dt*rand(size(C*xCurrent));
     newY=yCurrent(:,k+1);
+    toc
 end
 
 
-%Plot
-%figure(1)
-%plot(MPC_Xopt(1,1:end)); hold on
 
-%figure(2)
-%plot(MPC_Xopt(2,1:end)); hold on
-
-%figure(3)
-%plot(MPC_Xopt(3,1:end)); hold on
 mpc.plotResults(MPC_Xopt,MPC_Uopt)

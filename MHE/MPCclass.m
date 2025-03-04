@@ -135,17 +135,20 @@ classdef MPCclass
             grid on;
             legend('$x$', 'Interpreter', 'latex')
             title('States');
+            %ylim([-1,1])
             ylabel('$x$', 'Interpreter', 'latex')
             subplot(3, 1, 2);
             stairs(Xopt(2, :), 'b',  'LineWidth', 0.5);
             grid on;
             legend('$z$', 'Interpreter', 'latex')
+            %ylim([-1,1])
             ylabel('$z$', 'Interpreter', 'latex')
             subplot(3, 1, 3);
             stairs(Xopt(3, :),'color', [0.9290 0.6940 0.1250],  'LineWidth', 0.5);
             grid on;
             legend('$\theta$', 'Interpreter', 'latex')
             xlabel('$Iterations$', 'Interpreter', 'latex')
+            %ylim([-1,1])
             ylabel('$\theta$', 'Interpreter', 'latex')
 
 
