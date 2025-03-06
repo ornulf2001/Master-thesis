@@ -5,6 +5,7 @@ classdef MHEclass
         nStates         %Number of states
         nControls       %Number of control inputs
         nMeasurements   %Number of measurements
+        z0block         %Constant term in 2D linearized maggy model
         Ac              %Continuous time system matrix, A
         Bc              %Continuous time control matrix, B
         A               %Discrete time system matrix, A
@@ -23,18 +24,20 @@ classdef MHEclass
         x0              %Initial condition for states
         xprior          %Prior for states (initial condition or previous state estimate)
         xCurrent        %Current state estimate, xk
-        zOpt            %Solution to QP
+        wCurrent        %Current process noise estimate, wk
+        vCurrent        %Current measurement noise estimate, vk
         dt              %Sampling time for discretization of continuous time dynamics
         isReadyToRun    %Flag to start running MHE
         yBufferCount    %Counter for buffering of measurements in P
         uBufferCount    %Counter for buffering of control inputs in P
-        options         %Quadprog solver options
-        
+        nWSR            %Max iterations for QP solver
+        fileID          %File ID for logging to file
+        open            %Boolean, log file open for write or not
         
     end
     
     methods
-        function obj = MHEclass(N_MHE, Ac, Bc, C,Q,R,M, x0, dt,options)
+        function obj = MHEclass(N_MHE, Ac, Bc, C,Q,R,M,z0block, x0, dt)
             
             %Assigning arguments to class properties
             obj.N_MHE = N_MHE;
@@ -43,30 +46,69 @@ classdef MHEclass
             obj.Q=Q;
             obj.R=R;
             obj.M=M;
+            obj.z0block=z0block;
             obj.C = C;
             obj.dt = dt;
             obj.x0 = x0;
             obj.nStates= size(Ac,1);
             obj.nControls = size(Bc,2);
             obj.nMeasurements=size(C,1);
-            obj.options= options;
-
            
+            % Solver options
+            obj.nWSR=1000;            
             % running setup
+                        %obj = obj.startLogging(true);
             obj = obj.setup();
-        end        
+            
+        end
+        
+%         function obj=startLogging(obj,start)
+%             if ~islogical(start) || numel(start) > 1
+%                 error("Argument 'open' must be logical true or false.");
+%             end
+% 
+%             try
+%                 if start
+%                     obj.open=true;
+%                     dateTimeStr = datestr(now, 'yyyy-mm-dd_HH-MM-SS');
+%                     filename = sprintf('log_%s.txt', dateTimeStr);
+%                     
+%                     % Attempt to open the file
+%                     obj.fileID = fopen(filename, "w");
+%                     if obj.fileID == -1
+%                         error("File could not be opened.");
+%                     end
+%                 else
+%                     % Attempt to close the file
+%                     if obj.fileID > 0
+%                         obj.open=false;
+%                         status = fclose(obj.fileID);
+%                         if status ~= 0
+%                             error("Failed to close the file.");
+%                         end
+%                         obj.fileID = -1; % Reset fileID to indicate file is closed
+%                     end
+%                 end
+%             catch ME
+%                 % Handle errors by displaying an error message
+%                 disp(['Error occurred: ', ME.message]);
+%                 % Optionally, rethrow the error if you want it to be visible to higher levels
+%                 rethrow(ME);
+%             end
+%         end
+%         
+%         function obj=log(obj,message)
+%             %disp(obj.open)
+%             %disp(obj.fileID)
+%             fprintf(obj.fileID,message);
+%         end
+%         
         
         function obj=setup(obj)
-            % D=0;
-            % sysd=c2d(ss(obj.Ac,obj.Bc,obj.C,D),obj.dt,'zoh');
-            % obj.A=sysd.A;
-            % obj.B=sysd.B;
+            
             % Discretizing dynamics and initializing P. 
             obj.A = expm(obj.Ac * obj.dt);
             obj.B = inv(obj.Ac) * (expm(obj.Ac * obj.dt) - eye(size(obj.Ac))) * obj.Bc;
-
-
-
             obj.P = zeros(obj.nStates+obj.nMeasurements+obj.nControls, 1+(obj.N_MHE+1)+obj.N_MHE); 
 
             % Buffering init
@@ -74,6 +116,10 @@ classdef MHEclass
             obj.yBufferCount = 1;
             obj.uBufferCount = 1;
             
+            %Log
+            %m=">Dynamical model discretized";
+            %disp(m)
+            %obj=obj.log(m);
             
             %Setup optimization problem, G, g, Aeq, beq etc.
             obj = obj.setupOptimizationProblem(); 
@@ -132,7 +178,7 @@ classdef MHEclass
             %Buffer new control input
             if obj.uBufferCount <= obj.N_MHE && ~isempty(newU)
                 obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+obj.uBufferCount)=newU;
-                obj.beq(obj.nStates*(obj.uBufferCount-1)+1 : obj.nStates*obj.uBufferCount) =  obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,(obj.N_MHE+1)+1+obj.uBufferCount);
+                obj.beq(obj.nStates*obj.uBufferCount-1 : obj.nStates*obj.uBufferCount) = obj.z0block + obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,(obj.N_MHE+1)+1+obj.uBufferCount);
                 obj.uBufferCount=obj.uBufferCount+1;
             end
             %^ A biproduct of this solution is that the bufferCounts will
@@ -143,25 +189,22 @@ classdef MHEclass
         
         function obj=initialGuessPropegation(obj)
             
+            %Integrating x0 over the first horizon before MHE starts
             x_propagated = obj.x0;
-
-            %The following is not currently in use and is probably useless
-                %Integrating x0 over the first horizon before MHE starts
             for i = 1:obj.N_MHE
-                %x_propagated = obj.A * x_propagated + obj.B * obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+i);
+                x_propagated = obj.A * x_propagated + obj.B * obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+i);
             end
-            obj.xprior=x_propagated;
             obj.P(1:obj.nStates, 1) = x_propagated; %Update P with the propagated initial condition
             g_X(1:obj.nStates)=-2*obj.M*obj.P(1:obj.nStates,1); %Update g in cost function with the propagated initial condition
             obj.g(1:obj.nStates)=g_X(1:obj.nStates);
         end
         
         function obj=runMHE(obj,newY,newU)
-
+            
             %solve opt problem, currently only extracting zOpt
-            [obj.zOpt, ~, ~, ~,~] = quadprog(2*obj.G, obj.g,[],[], obj.Aeq, obj.beq, [], [], [], obj.options);
-            obj.xprior = obj.zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior as the next element after x0 for next iteration
-            obj.xCurrent=obj.zOpt(obj.nStates*obj.N_MHE + 1 : obj.nStates*(obj.N_MHE + 1)); %Extract current state estimate xk as the last element
+            [zOpt, ~, ~, ~,~,~] = qpOASES(2*obj.G, obj.g, obj.Aeq, [],[], obj.beq, obj.beq,[]);
+            obj.xprior = zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior as the next element after x0 for next iteration
+            obj.xCurrent=zOpt(obj.nStates*obj.N_MHE + 1 : obj.nStates*(obj.N_MHE + 1)); %Extract current state estimate xk as the last element
             
             % Update arrival cost with new xprior
             obj.P(1:obj.nStates,1) = obj.xprior; 
@@ -178,7 +221,7 @@ classdef MHEclass
             obj.beq(obj.nStates*obj.N_MHE+1 : obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.N_MHE+1)) = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2:obj.N_MHE+2); 
 
             %Update dynamics constraint with new control input in beq
-            obj.beq(1:obj.nStates*obj.N_MHE)=reshape(obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE),obj.nStates*obj.N_MHE,1);
+            obj.beq(1:obj.nStates*obj.N_MHE)=reshape(obj.z0block+obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE),obj.nStates*obj.N_MHE,1);
         end
         
         function obj = reset(obj, newx0)
@@ -187,6 +230,61 @@ classdef MHEclass
             obj.x0 = newx0;           
             obj.xCurrent = [];
             obj = obj.setup();  % Reinitialize the matrices if necessary
+        end
+        
+        function obj=rhs(obj,states,controls,params)
+            x=states(1); z=states(2); theta=states(3);
+            ux=controls(1); uz=controls(2);
+
+            %params 
+            mu0=params.physical.mu0;
+            gr=params.physical.g;
+            
+            Rad=params.solenoids.x(1); %Avstand fra nullpunkt til solenoid
+            rl=params.magnet.r; %Radius svevemagnet
+            rp=params.permanent.r(1); %Radius permanent magnet
+            ll=params.magnet.l; %Lengde svevemagnet
+            lp=params.permanent.l(1); %Lengde permanent magnet
+            
+            mass=params.magnet.m; %Mass
+            J=params.magnet.I(1); %Moment of inertia
+            ml = abs(params.magnet.J)*pi*rl^2*ll/mu0; % magnetisk moment svevemagnet
+            m = abs(params.permanent.J)*pi*rp^2*lp/mu0; % magnetisk moment permanent magnet
+            ml=[0;0;ml];
+            
+            % hybridmagneter
+            Ip = (ux + uz)/2; %Strøm positiv hybrid magnet
+            In = (uz - ux)/2; %Strøm negativ hybrid magnet
+            mp= (m+mu0*Ip).*[sin(theta);0;-cos(theta)];
+            mn= (m+mu0*In).*[sin(theta);0;-cos(theta)];
+            rn = [x - Rad*cos(theta);
+                  0;
+                  z - Rad*sin(theta)];
+            rp = [x + Rad*cos(theta);
+                  0;
+                  z + Rad*sin(theta)];
+            
+            %Magnetisk skalarpotensiale, Phi
+            phi=mu0/(4*pi) * (dot(mp,rp)/norm(rp)^3 + dot(mn,rn)/norm(rn)^3);
+            
+            dphi_dx = jacobian(phi, x);
+            d2phi_dxdz = jacobian(dphi_dx, z);
+            dphi_dz = jacobian(phi, z);
+            d2phi_dz2 = jacobian(dphi_dz, z);
+            
+            xddot = -(ml/mass) * d2phi_dxdz;
+            zddot = -(m/mass) * d2phi_dz2 - gr;
+            thetaddot = -(ml/J) * dphi_dx;
+            
+            rhs=[xddot;zddot;thetaddot];
+            obj.f=Function("f",{states,controls},rhs);
+        end
+
+
+        function obj=linearizeDynamics(obj)
+            
+            %Linearize dynamics around current state estimate xCurrent
+            obj.Ac=jacobian(obj.f);
         end
         
     end

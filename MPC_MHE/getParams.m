@@ -1,4 +1,4 @@
-function data = getParams()
+function data = getParams(parameters)
     persistent params
 
     if isempty(params)
