@@ -28,7 +28,7 @@ classdef MPCclass
     end
 
     methods
-        function obj = MPCclass(N_MPC, Ac, Bc, X0, dt, lb, ub, Q, R, QN, nStates, nControls,options)
+        function obj = MPCclass(N_MPC, Ac, Bc, X0, dt, lb, ub, Q, R, nStates, nControls,options)
             obj.N_MPC = N_MPC;
             obj.Ac = Ac;
             obj.Bc = Bc;
@@ -38,7 +38,6 @@ classdef MPCclass
             obj.nControls = nControls;
             obj.Q = Q;
             obj.R = R;
-            obj.QN = QN;
             obj.lb = lb;
             obj.ub = ub;
             obj.options = options;
@@ -51,7 +50,9 @@ classdef MPCclass
             obj.A = expm(obj.Ac * obj.dt);
             %obj.B = (expm(obj.Ac * obj.dt) - eye(size(obj.Ac))) * (obj.Ac \ obj.Bc);
             obj.B = inv(obj.Ac) * (expm(obj.Ac * obj.dt) - eye(size(obj.Ac))) * obj.Bc;
-
+            [K,P,~]=dlqr(obj.A,obj.B,obj.Q,obj.R);
+            obj.QN = P;
+            %obj.QN = 200*obj.Q;
             % Compute discrete-time B matrix using integral of exp(Ac*t)*Bc from 0 to dt
             %M = expm([-obj.Ac, obj.Bc; zeros(obj.nControls, obj.nStates + obj.nControls)] * obj.dt);
             %Bd = M(1:obj.nStates, obj.nStates+1:end);

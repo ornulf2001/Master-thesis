@@ -152,7 +152,14 @@ classdef MHEclass
         
         function obj=runMHE(obj,newY,newU)
 
-            
+            %solve opt problem, currently only extracting zOpt
+            [obj.zOpt, ~, ~, ~,~] = quadprog(2*obj.G, obj.g,[],[], obj.Aeq, obj.beq, [], [], [], obj.options);
+            obj.xprior = obj.zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior as the next element after x0 for next iteration
+            obj.xCurrent=obj.zOpt(obj.nStates*obj.N_MHE + 1 : obj.nStates*(obj.N_MHE + 1)); %Extract current state estimate xk as the last element
+            % Update arrival cost with new xprior
+            obj.P(1:obj.nStates,1) = obj.xprior; 
+            g_X(1:obj.nStates) = -2*obj.M*obj.P(1:obj.nStates,1);
+            obj.g(1:obj.nStates) = g_X(1:obj.nStates);
             
             %Shift measurement window with new measurement
             obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2:obj.N_MHE+2)=[obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 3:obj.N_MHE+2),newY]; 
@@ -165,16 +172,6 @@ classdef MHEclass
 
             %Update dynamics constraint with new control input in beq
             obj.beq(1:obj.nStates*obj.N_MHE)=reshape(obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE),obj.nStates*obj.N_MHE,1);
-
-            %solve opt problem, currently only extracting zOpt
-            [obj.zOpt, ~, ~, ~,~] = quadprog(2*obj.G, obj.g,[],[], obj.Aeq, obj.beq, [], [], [], obj.options);
-            obj.xprior = obj.zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior as the next element after x0 for next iteration
-            obj.xCurrent=obj.zOpt(obj.nStates*obj.N_MHE + 1 : obj.nStates*(obj.N_MHE + 1)); %Extract current state estimate xk as the last element
-            % Update arrival cost with new xprior
-            obj.P(1:obj.nStates,1) = obj.xprior; 
-            g_X(1:obj.nStates) = -2*obj.M*obj.P(1:obj.nStates,1);
-            obj.g(1:obj.nStates) = g_X(1:obj.nStates);
-            
         end
         
         function obj = reset(obj, newx0)
