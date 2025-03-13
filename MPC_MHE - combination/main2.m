@@ -30,9 +30,9 @@ dt=0.003;
 
 alpha=0.8;
 noise_std=0.1*1e-3; %mT
-R_MHE=1e-5*inv(noise_std^2*eye(nMeasurements));         %5*dt*diag([1,1]);
-Q_MHE=1e-5*2e8*diag([10,1,10,10,1,10]);
-M_MHE=1e-5*5e6*diag([10,1,10,3,1,3]);
+R_MHE=inv(noise_std^2*eye(nMeasurements));         
+Q_MHE=2e8*diag([10,1,10,10,1,10]);
+M_MHE=5e6*diag([10,1,10,3,1,3]);
 P0 = inv(M_MHE);
 
 Q_MPC = diag([100 50 100 1 1 1]);
@@ -42,7 +42,7 @@ run("mpc_bounds.m")
 
 %Run
 MHE_options = optimoptions("quadprog","Display","off", "Algorithm","interior-point-convex");
-mhe = MHEclass(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,X0,dt,MHE_options);
+mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,1e-5*Q_MHE,1e-5*R_MHE,1e-5*M_MHE,X0,P0,dt,MHE_options);
 
 MPC_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'interior-point-convex');
 mpc = MPCclass(N_MPC, Ac, Bc, X0, dt, lb, ub, Q_MPC, R_MPC, nStates, nControls,MPC_options, xRef, lbuRef, ubuRef);
@@ -77,8 +77,7 @@ for k=1:NT-1
         newU=MPC_Uopt(:,k);
 
     else
-        xEst
-        MPC_Xopt(:,k)
+        
        [xNext, Uopt]=mpc.runMPC(xEst);
         %MPC_Xopt(:,k+1) = mpc.A*MPC_Xopt(:,k) + mpc.B*Uopt;
         [T, X] = ode15s(@(t, x) f(x, Uopt, params), tspan, xEst);
@@ -127,7 +126,7 @@ figure(6)
 plot(MHE_est(3,1:end)); hold on
 plot(MPC_Xopt(3, 1:end));
 legend('est', 'xopt')
-%mpc.plotResults(MPC_Xopt,MPC_Uopt)
+%mpc.plotResults(MPC_Xopt,MPC_Uopt,X)
 
 % figure(7)
 % plot(yNext(1,:)); hold on

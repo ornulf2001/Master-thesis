@@ -145,7 +145,7 @@ classdef MPCclass
 
 
 
-        function plotResults(obj, Xopt, Uopt)
+        function plotResults(obj, Xopt, Uopt, xRef)
 
             % Plotting the results
             %t = 0:obj.NT;
@@ -153,19 +153,30 @@ classdef MPCclass
             
             figure(1);
             subplot(3, 1, 1);
-            stairs(Xopt(1, :), 'k', 'LineWidth', 1.5);
+            stairs(Xopt(1, :), 'k', 'LineWidth', 1.5);hold on
+            plot([0, size(Xopt,2)],[xRef(1), xRef(1)])
+            %text(30, 0.9*xRef(1), 'xRef', 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'right', 'FontSize', 8);
             grid on;
+            ylim([1.1*min(Xopt(1,:))-1e-4, 1.1*max(Xopt(1,:))+1e-4])
             legend('$x$', 'Interpreter', 'latex')
             title('States');
             ylabel('$x$', 'Interpreter', 'latex')
+
             subplot(3, 1, 2);
-            stairs(Xopt(2, :), 'b',  'LineWidth', 1.5);
+            stairs(Xopt(2, :), 'b',  'LineWidth', 1.5);hold on
+            plot([0, size(Xopt,2)],[xRef(2), xRef(2)])
+            %text(30, 0.9*xRef(2), 'zRef', 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'right', 'FontSize', 8);
             grid on;
+            ylim([1.1*min(Xopt(2,:))-1e-4, 1.1*max(Xopt(2,:))+1e-4])
             legend('$z$', 'Interpreter', 'latex')
             ylabel('$z$', 'Interpreter', 'latex')
+
             subplot(3, 1, 3);
-            stairs(Xopt(3, :),'color', [0.9290 0.6940 0.1250],  'LineWidth', 1.5);
+            stairs(Xopt(3, :),'color', [0.9290 0.6940 0.1250],  'LineWidth', 1.5);hold on
+            plot([0, size(Xopt,2)],[xRef(3), xRef(3)])
+            %text(30, 0.9*xRef(3), 'thetaRef', 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'right', 'FontSize', 8);
             grid on;
+            ylim([1.1*min(Xopt(3,:))-1e-4, 1.1*max(Xopt(3,:))+1e-4])
             legend('$\theta$', 'Interpreter', 'latex')
             xlabel('$Iterations$', 'Interpreter', 'latex')
             ylabel('$\theta$', 'Interpreter', 'latex')

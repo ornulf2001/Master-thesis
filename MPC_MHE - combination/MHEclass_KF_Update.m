@@ -170,25 +170,60 @@ classdef MHEclass_KF_Update
 
             %solve opt problem, currently only extracting zOpt
             [obj.zOpt, ~, ~, ~,~] = quadprog(2*obj.G, obj.g,[],[], obj.Aeq, obj.beq, [], [], [], obj.options);
-
+            
             x_zero = obj.zOpt(1:obj.nStates);
-            x_predicted = obj.A*x_zero + obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1)
-            P_predicted = obj.A*obj.P0*transpose(obj.A) + obj.Q
-            innovation = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements,1+obj.N_MHE+1)-obj.C*x_predicted
-            S_cov_upd = obj.C * P_predicted * transpose(obj.C) + obj.R
-            kalman_gain = P_predicted*transpose(obj.C)*inv(S_cov_upd)
+            % Extract the control input at the start of the horizon (k-N)
+            u_kN = obj.P(obj.nStates+obj.nMeasurements+1:end, 1+(obj.N_MHE+1)+1); % Correct index for u_{k-N}
+            
+            % Predict x_zero (k-N) to k-N+1 using u_{k-N}
+            x_predicted = obj.A * x_zero + obj.B * u_kN; 
+            P_predicted = obj.A * obj.P0 * obj.A' + inv(obj.Q); % Q_MHE is inverse covariance
+            
+            % Extract measurement at k-N+1 (within horizon, not newY)
+            y_kN_plus1 = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2); % Index 2 corresponds to k-N+1
+            
+            % Compute innovation using the correct measurement
+            innovation = y_kN_plus1 - obj.C * x_predicted;
+            
+            % Kalman gain and update
+            S_cov_upd = obj.C * P_predicted * obj.C' + inv(obj.R);
+            % Regularize S_cov_upd to avoid numerical issues
+            S_reg = S_cov_upd + 1e-6 * eye(size(S_cov_upd));
+            kalman_gain = P_predicted * obj.C' / S_reg; % Use matrix division for stability
+            
             x_corrected = x_predicted + kalman_gain * innovation;
-            P_corrected = (eye(size(x_predicted))- kalman_gain * obj.C) * P_predicted;
-            obj.P0=P_corrected;
-
-            epsilon = 1e-6;  % or another small value
-            P_reg = P_corrected + epsilon * eye(size(P_corrected));
-            newM = inv(P_reg)           
-            %obj.M=newM;
-
-            obj.xprior = x_corrected;
+            P_corrected = (eye(obj.nStates) - kalman_gain * obj.C) * P_predicted;
+            
+            % Regularize P_corrected before inverting
+            P_reg = P_corrected + 1e-6 * eye(obj.nStates);
+            obj.P0 = P_reg;
+            newM = inv(P_reg);
+            %obj.M = inv(P_reg); % Update arrival cost weight
+            
+            % Update xprior for next iteration
+            %obj.xprior = x_corrected;
+            % x_zero = obj.zOpt(1:obj.nStates);
+            % x_predicted = obj.A*x_zero + obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1)
+            % P_predicted = obj.A*obj.P0*transpose(obj.A) + inv(obj.Q)
+            % innovation = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements,1+obj.N_MHE+1)-obj.C*x_predicted
+            % S_cov_upd = obj.C * P_predicted * transpose(obj.C) + inv(obj.R)
+            % kalman_gain = P_predicted*transpose(obj.C)*inv(S_cov_upd)
+            % x_corrected = x_predicted + kalman_gain * innovation;
+            % P_corrected = (eye(size(x_predicted))- kalman_gain * obj.C) * P_predicted;
+            % obj.P0=P_corrected;
+            % 
+            % epsilon = 1e-6;  % or another small value
+            % P_reg = P_corrected + epsilon * eye(size(P_corrected));
+            % newM = inv(P_reg)           
+            % %obj.M=newM;
+            % 
+            % obj.xprior = x_corrected;
             %obj.xprior = obj.zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior as the next element after x0 for next iteration
+            obj.xprior = x_corrected ;
 
+            %priorError=obj.xprior - x_corrected
+            newM=1/2*(newM+transpose(newM));
+            obj.M=newM;
             %obj.xprior
             %x_corrected
 

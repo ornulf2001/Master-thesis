@@ -128,24 +128,24 @@ classdef MPCclass
             uRef
         end
 
-        function [xNext, Uopt] = runMPC(obj,xCurrent)
-        %obj.beq(1:obj.nStates) = xCurrent;
-        %b=obj.beq(1:obj.nStates)
-         obj.beq(1:obj.nStates) = xCurrent;
+        function [xNextTrue, Uopt] = runMPC(obj,xCurrent)
+        
+        % uRef = pinv(obj.B) * ((eye(obj.nStates) - obj.A) * obj.xRef);
+        obj.beq(1:obj.nStates) = xCurrent;
         [Zopt, fval, exitflag, output, lambda] = quadprog(2*obj.G, obj.f, [],[],obj.Aeq, obj.beq,obj.lb,obj.ub, [], obj.options);
         
         U0 = Zopt((obj.N_MPC+1)*obj.nStates+1 : (obj.N_MPC+1)*obj.nStates + obj.nControls);
         Uopt = U0(1:obj.nControls);
 
         X1 = Zopt(1:(obj.N_MPC+1)*obj.nStates);
-        xNext=X1(obj.nStates+1:2*obj.nStates);
+        xNextTrue=X1(obj.nStates+1:2*obj.nStates);
 
 
         end
 
 
 
-        function plotResults(obj, Xopt, Uopt)
+        function plotResults(obj, Xopt, Uopt, xRef)
 
             % Plotting the results
             %t = 0:obj.NT;
@@ -153,18 +153,27 @@ classdef MPCclass
             
             figure(1);
             subplot(3, 1, 1);
-            stairs(Xopt(1, :), 'k', 'LineWidth', 1.5);
+            stairs(Xopt(1, :), 'k', 'LineWidth', 1.5);hold on
+            plot([0, size(Xopt,2)],[xRef(1), xRef(1)])
+            text(size(Xopt,2), xRef(1), 'xRef', 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'right', 'FontSize', 10);
             grid on;
+            ylim([1.1*min(Xopt(1,:))-1e-4, 1.1*max(Xopt(1,:))+1e4])
             legend('$x$', 'Interpreter', 'latex')
             title('States');
             ylabel('$x$', 'Interpreter', 'latex')
+
             subplot(3, 1, 2);
-            stairs(Xopt(2, :), 'b',  'LineWidth', 1.5);
+            stairs(Xopt(2, :), 'b',  'LineWidth', 1.5);hold on
+            plot([0, size(Xopt,2)],[xRef(2), xRef(2)])
+            text(size(Xopt,2), xRef(2), 'zRef', 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'right', 'FontSize', 10);
             grid on;
             legend('$z$', 'Interpreter', 'latex')
             ylabel('$z$', 'Interpreter', 'latex')
+
             subplot(3, 1, 3);
-            stairs(Xopt(3, :),'color', [0.9290 0.6940 0.1250],  'LineWidth', 1.5);
+            stairs(Xopt(3, :),'color', [0.9290 0.6940 0.1250],  'LineWidth', 1.5);hold on
+            plot([0, size(Xopt,2)],[xRef(3), xRef(3)])
+            text(size(Xopt,2), xRef(3), 'thetaRef', 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'right', 'FontSize', 10);
             grid on;
             legend('$\theta$', 'Interpreter', 'latex')
             xlabel('$Iterations$', 'Interpreter', 'latex')
