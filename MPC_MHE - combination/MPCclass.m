@@ -153,7 +153,7 @@ classdef MPCclass
             
             figure(1);
             subplot(3, 1, 1);
-            stairs(Xopt(1, :), 'k', 'LineWidth', 1.5);hold on
+            stairs(Xopt(1, :), 'k', 'LineWidth', 1);hold on
             plot([0, size(Xopt,2)],[xRef(1), xRef(1)])
             %text(30, 0.9*xRef(1), 'xRef', 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'right', 'FontSize', 8);
             grid on;
@@ -163,7 +163,7 @@ classdef MPCclass
             ylabel('$x$', 'Interpreter', 'latex')
 
             subplot(3, 1, 2);
-            stairs(Xopt(2, :), 'b',  'LineWidth', 1.5);hold on
+            stairs(Xopt(2, :), 'b',  'LineWidth', 1);hold on
             plot([0, size(Xopt,2)],[xRef(2), xRef(2)])
             %text(30, 0.9*xRef(2), 'zRef', 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'right', 'FontSize', 8);
             grid on;
@@ -172,7 +172,7 @@ classdef MPCclass
             ylabel('$z$', 'Interpreter', 'latex')
 
             subplot(3, 1, 3);
-            stairs(Xopt(3, :),'color', [0.9290 0.6940 0.1250],  'LineWidth', 1.5);hold on
+            stairs(Xopt(3, :),'color', [0.9290 0.6940 0.1250],  'LineWidth', 1);hold on
             plot([0, size(Xopt,2)],[xRef(3), xRef(3)])
             %text(30, 0.9*xRef(3), 'thetaRef', 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'right', 'FontSize', 8);
             grid on;

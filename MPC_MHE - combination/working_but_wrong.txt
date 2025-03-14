@@ -1,3 +1,5 @@
+WORKING But wrong setup of LQR -> fade in MPC
+
 clc,clear
 
 addpath(genpath("NewModel_2D"))
@@ -31,15 +33,12 @@ dt=0.003;
 alpha=0.7;
 noise_std=0.1*1e-3; %mT
 R_MHE=inv(noise_std^2*eye(nMeasurements));         
-Q_MHE=2e10*diag([10,10,10,1,1,1]);
+Q_MHE=2e9*diag([10,10,10,10,10,10]);
 M_MHE=5e6*diag([10,10,10,3,3,3]);
 P0 = inv(M_MHE);
 
-Q_MPC = diag([100 100 100 3 3 3]);
+Q_MPC = diag([100 100 100 1 3 1]);
 R_MPC = diag([0.001 0.001]);
-
-Q_LQR = diag([10,10,10,1,1,1]);
-R_LQR = diag([0.01,0.01]);
 %Bounds
 run("mpc_bounds.m")
 
@@ -71,45 +70,41 @@ uRef = mpc.computeReferenceInput();
 for k=1:NT-1
     k
     if k<61
-        %[K_dlqr,~,~] = dlqr(mpc.A, mpc.B, Q_LQR, R_LQR);
-        K_dlqr = [120,120,120,0.5,0.5,0.5;120,120,120,0.5,0.5,0.5];
+        [K_dlqr,~,~] = dlqr(mpc.A, mpc.B, mpc.Q, mpc.R);
+        %K_dlqr = [30,300,30,100,100,100;30,30,300,100,100,100];
         %Kp = K_dlqr(:,1:nStates/2);
         %Kd = K_dlqr(:,nStates/2+1:nStates);
         %U_PD = Kp*(xEst(1:nStates/2)-xRef(1:nStates/2)) + Kd*(xEst(nStates/2+1:nStates)-xRef(nStates/2+1:nStates));
         U_LQR = -K_dlqr*(xRef-xEst);
-        U=U_LQR;%[0;0];
-
+        U=U_LQR; %[0;0];
+    
         fade_period=50:60;
         if ismember(k,fade_period)
             [~, Uopt]=mpc.runMPC(xEst);
-            Udiff=U_LQR - Uopt;
+            Udiff=U_LQR - Uopt
             U = (1-gamma_f(k,fade_period))*U_LQR + gamma_f(k,fade_period)*Uopt;
         end
-        
 
-        %[T, X] = ode15s(@(t, x) f(x, U, params), tspan, MPC_Xopt(:,k));
-        %MPC_Xopt(:, k+1) = X(end, :)';% + Xeq;
-        MPC_Xopt(:,k+1) = mpc.A*MPC_Xopt(:,k) + mpc.B*U;
-
-        MPC_Uopt(:,k) = U;
+        [T, X] = ode15s(@(t, x) f(x, U, params), tspan, MPC_Xopt(:, k));
+        MPC_Xopt(:, k+1) = X(end, :)';% + Xeq;
+        %MPC_Xopt(:,k+1) = mpc.A*MPC_Xopt(:,k) + mpc.B*U;
+        %xNext = MPC_Xopt(:,k+1);
+        MPC_Uopt(:,k) = U;%+uRef;
         newU=MPC_Uopt(:,k);
 
 
-    else
-    
-
-        [~, Uopt]=mpc.runMPC(xEst);
-
-        if k>=65 && k<75    
-        Uopt=Uopt+[5;15];
-        end
-
-        MPC_Xopt(:,k+1) = mpc.A*MPC_Xopt(:,k) + mpc.B*Uopt;
-        %[T, X] = ode15s(@(t, x) f(x, Uopt, params), tspan, MPC_Xopt(:,k));
-        %MPC_Xopt(:, k+1) = X(end, :)';% + Xeq;
-        MPC_Uopt(:,k)= Uopt + uRef;
-        newU=MPC_Uopt(:,k);
     end
+        
+    [~, Uopt]=mpc.runMPC(xEst);
+    if k>=65 && k<75    
+    Uopt=Uopt+[5;15];
+    end
+    %MPC_Xopt(:,k+1) = mpc.A*MPC_Xopt(:,k) + mpc.B*Uopt;
+    [T, X] = ode15s(@(t, x) f(x, Uopt, params), tspan, xEst);
+    MPC_Xopt(:, k+1) = X(end, :)';% + Xeq;
+    MPC_Uopt(:,k)= Uopt + uRef;
+    newU=MPC_Uopt(:,k);
+
     
     
     noise=noise_std*randn([nMeasurements,1]);
