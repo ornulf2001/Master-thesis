@@ -70,14 +70,16 @@ uRef = mpc.computeReferenceInput();
 %init_plot(X0);
 for k=1:NT-1
     k
-    if k<61
+    if k<=60
+        
         %[K_dlqr,~,~] = dlqr(mpc.A, mpc.B, Q_LQR, R_LQR);
-        K_dlqr = [120,120,120,0.5,0.5,0.5;120,120,120,0.5,0.5,0.5];
-        %Kp = K_dlqr(:,1:nStates/2);
-        %Kd = K_dlqr(:,nStates/2+1:nStates);
-        %U_PD = Kp*(xEst(1:nStates/2)-xRef(1:nStates/2)) + Kd*(xEst(nStates/2+1:nStates)-xRef(nStates/2+1:nStates));
-        U_LQR = -K_dlqr*(xRef-xEst);
-        U=U_LQR;%[0;0];
+        K = [120,120,120,5,5,5;120,120,120,5,5,5];
+            %Kp = K_dlqr(:,1:nStates/2);
+            %Kd = K_dlqr(:,nStates/2+1:nStates);
+            %U_PD = Kp*(xEst(1:nStates/2)-xRef(1:nStates/2)) + Kd*(xEst(nStates/2+1:nStates)-xRef(nStates/2+1:nStates));
+        U_LQR = -K*(xEst-xRef);
+
+        U=U_LQR;
 
         fade_period=50:60;
         if ismember(k,fade_period)
@@ -85,6 +87,7 @@ for k=1:NT-1
             Udiff=U_LQR - Uopt;
             U = (1-gamma_f(k,fade_period))*U_LQR + gamma_f(k,fade_period)*Uopt;
         end
+        
         
 
         %[T, X] = ode15s(@(t, x) f(x, U, params), tspan, MPC_Xopt(:,k));
@@ -101,10 +104,10 @@ for k=1:NT-1
         [~, Uopt]=mpc.runMPC(xEst);
 
         if k>=65 && k<75    
-        Uopt=Uopt+[5;15];
+        Uopt=Uopt+[50;150];
         end
 
-        MPC_Xopt(:,k+1) = mpc.A*MPC_Xopt(:,k) + mpc.B*Uopt;
+        MPC_Xopt(:,k+1) = mpc.A*MPC_Xopt(:,k) + mpc.B*(Uopt+uRef);
         %[T, X] = ode15s(@(t, x) f(x, Uopt, params), tspan, MPC_Xopt(:,k));
         %MPC_Xopt(:, k+1) = X(end, :)';% + Xeq;
         MPC_Uopt(:,k)= Uopt + uRef;

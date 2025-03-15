@@ -21,10 +21,10 @@ nMeasurements = size(C,1);
 
 %Tuning
 xRef = [0; 0.03; 0; 0; 0; 0];
-X0=[0;0;0;0;0;0];
+X0=[0.001;0.001;0;0;0;0];
 NT=500;
 
-N_MHE=15;
+N_MHE=10;
 N_MPC=20;
 dt=0.003;
 
@@ -32,7 +32,7 @@ alpha=0.7;
 noise_std=0.1*1e-3; %mT
 R_MHE=inv(noise_std^2*eye(nMeasurements));         
 Q_MHE=2e10*diag([10,10,10,1,1,1]);
-M_MHE=5e6*diag([10,10,10,3,3,3]);
+M_MHE=5e5*diag([10,10,10,3,3,3]);
 P0 = inv(M_MHE);
 
 Q_MPC = diag([100 100 100 3 3 3]);
@@ -49,6 +49,7 @@ mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,1e-5*Q_MHE,1e-5*R_MHE,1e-5*M_MHE,X0,P0,dt
 
 MPC_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'interior-point-convex');
 mpc = MPCclass(N_MPC, Ac, Bc, X0, dt, lb, ub, Q_MPC, R_MPC, nStates, nControls,MPC_options, xRef, lbuRef, ubuRef);
+
 MPC_Xopt = zeros(nStates, NT);
 MPC_Uopt = zeros(nControls, NT-1);
 MHE_est = zeros(nStates, NT);
@@ -61,7 +62,6 @@ newY=yNext(:,1);
 xNext = X0;
 MPC_Xopt(:, 1) = X0;
 error=[];
-
 tspan = [0, dt];
 
 % Calculating the reference input for stabilizing in the reference point
@@ -70,14 +70,15 @@ uRef = mpc.computeReferenceInput();
 %init_plot(X0);
 for k=1:NT-1
     k
-    if k<61
-        %[K_dlqr,~,~] = dlqr(mpc.A, mpc.B, Q_LQR, R_LQR);
-        K_dlqr = [120,120,120,0.5,0.5,0.5;120,120,120,0.5,0.5,0.5];
-        %Kp = K_dlqr(:,1:nStates/2);
-        %Kd = K_dlqr(:,nStates/2+1:nStates);
-        %U_PD = Kp*(xEst(1:nStates/2)-xRef(1:nStates/2)) + Kd*(xEst(nStates/2+1:nStates)-xRef(nStates/2+1:nStates));
-        U_LQR = -K_dlqr*(xRef-xEst);
-        U=U_LQR;%[0;0];
+    if k<=60
+        [K_dlqr,~,~] = dlqr(mpc.A, mpc.B, Q_LQR, R_LQR);
+        K = [120,120,120,5,5,5;120,120,120,5,5,5];
+            %Kp = K_dlqr(:,1:nStates/2);
+            %Kd = K_dlqr(:,nStates/2+1:nStates);
+            %U_PD = Kp*(xEst(1:nStates/2)-xRef(1:nStates/2)) + Kd*(xEst(nStates/2+1:nStates)-xRef(nStates/2+1:nStates));
+        U_LQR = -K_dlqr*(xEst-xRef);
+
+        U=U_LQR;
 
         fade_period=50:60;
         if ismember(k,fade_period)
@@ -86,7 +87,6 @@ for k=1:NT-1
             U = (1-gamma_f(k,fade_period))*U_LQR + gamma_f(k,fade_period)*Uopt;
         end
         
-
         %[T, X] = ode15s(@(t, x) f(x, U, params), tspan, MPC_Xopt(:,k));
         %MPC_Xopt(:, k+1) = X(end, :)';% + Xeq;
         MPC_Xopt(:,k+1) = mpc.A*MPC_Xopt(:,k) + mpc.B*U;
@@ -94,14 +94,11 @@ for k=1:NT-1
         MPC_Uopt(:,k) = U;
         newU=MPC_Uopt(:,k);
 
-
     else
-    
-
         [~, Uopt]=mpc.runMPC(xEst);
 
         if k>=65 && k<75    
-        Uopt=Uopt+[50;150];
+            Uopt=Uopt+[50;150];
         end
 
         MPC_Xopt(:,k+1) = mpc.A*MPC_Xopt(:,k) + mpc.B*(Uopt+uRef);
@@ -109,6 +106,7 @@ for k=1:NT-1
         %MPC_Xopt(:, k+1) = X(end, :)';% + Xeq;
         MPC_Uopt(:,k)= Uopt + uRef;
         newU=MPC_Uopt(:,k);
+        
     end
     
     

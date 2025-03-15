@@ -180,10 +180,10 @@ classdef MHEclass_KF_Update
             P_predicted = obj.A * obj.P0 * obj.A' + inv(obj.Q); % Q_MHE is inverse covariance
             
             % Extract measurement at k-N+1 (within horizon, not newY)
-            y_kN_plus1 = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2); % Index 2 corresponds to k-N+1
+            y_k_Nplus1 = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2); % Index 2 corresponds to k-N+1
             
             % Compute innovation using the correct measurement
-            innovation = y_kN_plus1 - obj.C * x_predicted;
+            innovation = y_k_Nplus1 - obj.C * x_predicted;
             
             % Kalman gain and update
             S_cov_upd = obj.C * P_predicted * obj.C' + inv(obj.R);

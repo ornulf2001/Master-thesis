@@ -29,14 +29,17 @@ N_MPC=20;
 dt=0.002;
 
 alpha=0.9;
-noise_std=0.1*1e-3; %mT
-R_MHE=inv(noise_std^2*eye(nMeasurements));         
-Q_MHE=5e8*diag([1,1,1,1,1,1]);
+load("noise_cov_matrix_real.mat") %R: Covariance of noise measurements "data_no_control.m"
+%noise_std=0.1*1e-3; %mT
+%R_MHE=inv(noise_std^2*eye(nMeasurements));         
+R_MHE=inv(R);
+Q_MHE=5e10*diag([1,1,1,1,1,1]);
 M_MHE=5e8*diag([1,1,1,3,3,3]);
 P0 = inv(M_MHE);
 
 %load("data_no_control.mat")
 load("data_control_and_perturbation.mat")
+
 Y_noisy=[data.y.bx';data.y.bz']*1e-3;
 Ip=data.u.Ix_plus';
 In=data.u.Ix_minus';
@@ -70,12 +73,13 @@ subplot(2,1,1)
 plot(Y_noisy(1,1:ceil(size(Y_noisy,2)/4))); hold on
 plot(est_meas(1,:))
 legend(["meas","est"])
-title("Meas 1")
+title("bx")
+
 subplot(2,1,2)
-plot(Y_noisy(2,1:ceil(size(Y_noisy,2)/4))); hold on
-plot(est_meas(2,:))
-legend("est")
-title("Meas 2")
+plot(Y_noisy(2,1:ceil(size(Y_noisy,2)/4))-mean(Y_noisy(2,1:ceil(size(Y_noisy,2)/4)))); hold on
+plot(est_meas(2,:)-mean(est_meas(2,:)))
+legend(["meas","est"])
+title("bz")
 % subplot(3,1,3)
 % %plot(Y_noisy(3,1:ceil(size(Y_noisy,2)/4))); hold on
 % plot(xsol2(3,:))
