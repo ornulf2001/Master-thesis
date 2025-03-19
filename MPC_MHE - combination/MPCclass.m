@@ -125,7 +125,7 @@ classdef MPCclass
             options = optimset('Display','on', 'Diagnostics','on', 'LargeScale','off', 'Algorithm', 'interior-point-convex');
             
             uRef = quadprog(GU, fU, [], [], AeqU, beqU, obj.lbuRef, obj.ubuRef, [], options);
-            uRef
+            
         end
 
         function [xNextTrue, Uopt] = runMPC(obj,xCurrent)

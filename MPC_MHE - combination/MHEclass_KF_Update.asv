@@ -195,7 +195,7 @@ classdef MHEclass_KF_Update
             P_predicted = obj.A * obj.P0 * obj.A' + inv(obj.Q); % Q_MHE is inverse covariance
             
             % Extract measurement at k-N+1 (within horizon, not newY)
-            y_k_Nplus1 = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 3); % Index 2 corresponds to k-N+1
+            y_k_Nplus1 = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2); % Index 2 corresponds to k-N+1
             
             % Compute innovation using the correct measurement
             innovation = y_k_Nplus1 - obj.C * x_predicted;
@@ -233,13 +233,14 @@ classdef MHEclass_KF_Update
             % %obj.M=newM;
             % 
             % obj.xprior = x_corrected;
-            obj.xprior = obj.zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior as the next element after x0 for next iteration
+            %obj.xprior = obj.zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior as the next element after x0 for next iteration
             %obj.xprior = x_corrected ;
 
             %priorError=obj.xprior - x_corrected
             newM=1/2*(newM+transpose(newM));
-            %obj.M=newM;
-            obj.xprior - x_corrected
+            obj.M=newM;
+            %obj.xprior
+            %x_corrected
 
             obj.xCurrent=obj.zOpt(obj.nStates*obj.N_MHE + 1 : obj.nStates*(obj.N_MHE + 1)); %Extract current state estimate xk as the last element
             % Update arrival cost with new xprior
