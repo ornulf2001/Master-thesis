@@ -3,10 +3,10 @@ clc,clear
 addpath(genpath('3D model reduced order'))
 
 
-%% Define system parameters
+% Define system parameters
 params = parameters;
 
-%% Find equilibrium point
+% Find equilibrium point
 index = @(A,i) A(i);
 fz = @(z) index(f([0,0,z,zeros(1,7)]',[0,0,0,0]',params),8);  % state is now 10x1
 
@@ -15,7 +15,7 @@ zeq =  fzero(fz,0.1);
 xeq = [0,0,zeq,zeros(1,7)]';
 ueq = [0,0,0,0]';
 
-%% Linearize model
+% Linearize model
 xlp = xeq;   % 10x1 equilibrium state
 ulp = ueq;
 
@@ -25,13 +25,13 @@ nStates=size(Ac,1);
 nControls = size(Bc,2);
 nMeasurements = size(C,1);
 
-%% Tuning
+% Tuning
 xRef = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0];
-X0=[0.001;0.001;0.001;0;0;0;0;0;0;0;];
+X0=[0.001;0.001+zeq;0.001;0;0;0;0;0;0;0;];
 NT=500;
 
-N_MHE=20;
-N_MPC=30;
+N_MHE=10;
+N_MPC=20;
 dt=0.003;
 
 
@@ -40,34 +40,29 @@ dt=0.003;
 alpha=0.9;
 noise_std=0.1*1e-3; %mT
 R_MHE=inv(noise_std^2*eye(nMeasurements));         
-Q_MHE=5e2*diag([30,30,30,10,10,10,10,10,1,1]); 
+Q_MHE=5e2*diag([300,300,30,300,300,1,1,10,1,1]); 
     %Start out with low Q to trust measurements during start up, 
     %then increase Q after N_MHE+1. 
     %See below in loop
                                   
-%load("KF_M.mat")
-%M_MHE = mheM;
-%M_MHE=5e5*diag([100,100,1000,100,100,1000,1000,30,30,30]);
-M_MHE = 5e2*diag([10,10,10,10,10,3,3,3,3,3]);
+
+M_MHE = 5e5*diag([10,10,10,10,10,3,3,3,3,3]);
 P0 = inv(M_MHE);
 
-Q_MPC = diag([500 500 100 10 10 1 1 1 1 1]);
-R_MPC = diag([0.8 0.8 0.8 0.8]);
+Q_MPC = diag([500 50 50 50 50 0.5 0.5 0.5 0.5 0.5]);
+R_MPC = diag([0.0001 0.0001 0.0001 0.0001]);
 
-%Q_LQR = diag([500 500 10 0.8 0.8 7 0.8 0.8 0.8 0.8]);
-%R_LQR = diag([0.001 0.001 0.0001 0.0001]);
-%Q_LQR = diag([ ...
-%    1e1,1e1,1e1,1e1,1e1, ...
-%    1e1,1e1,1e5,1e1,1e1
- %   ]);
-%R_LQR = 1e2*eye(4);
-Q_LQR=Q_MPC;
-R_LQR=R_MPC;
 
-%% Bounds
+Q_LQR = diag([ ...
+   1e1,1e1,1e1,1e1,1e1, ...
+   1e1,1e1,1e5,1e1,1e1
+   ]);
+R_LQR = 1e2*eye(4);
+
+% Bounds
 run("mpc_bounds.m")
 
-%% Run
+% Run
 MHE_options = optimoptions("quadprog","Display","off", "Algorithm","interior-point-convex");
 mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,1e-5*Q_MHE,1e-5*R_MHE,1e-5*M_MHE,X0,P0,dt,MHE_options);
 
@@ -95,7 +90,7 @@ uRef = mpc.computeReferenceInput();
 for k=1:NT-1
     k
     if k==mhe.N_MHE+2
-        mhe.Q = 5e6*mhe.Q; %This relies on having enabled dynamic update of arrival cost in MHE. 
+        mhe.Q = 5e5*mhe.Q; %This relies on having enabled dynamic update of arrival cost in MHE. 
                            %That is, G must be updated with the new Q, which is done automatically when 
                            %updating M as well in arrival cost. If this is not done, we must update G here also.
     end
@@ -105,10 +100,6 @@ for k=1:NT-1
 
     if k<=60
         [K_lqr,~,~] = lqr(mpc.Ac, mpc.Bc, Q_LQR, R_LQR);
-        %K = [120,120,120,5,5,5;120,120,120,5,5,5];
-            %Kp = K_dlqr(:,1:nStates/2);
-            %Kd = K_dlqr(:,nStates/2+1:nStates);
-            %U_PD = Kp*(xEst(1:nStates/2)-xRef(1:nStates/2)) + Kd*(xEst(nStates/2+1:nStates)-xRef(nStates/2+1:nStates));
         U_LQR = -K_lqr*xEst;
 
         U=U_LQR;
@@ -120,23 +111,23 @@ for k=1:NT-1
             U = (1-gamma_f(k,fade_period))*U_LQR + gamma_f(k,fade_period)*Uopt;
         end
         
-        [T, X] = ode45(@(t, x) f(x, U, params), tspan, X_sim(:,k));
-        X_sim(:, k+1) = X(end, :)';
+        %[T, X] = ode45(@(t, x) f(x, U, params), tspan, X_sim(:,k));
+        %X_sim(:, k+1) = X(end, :)';
 
         U_sim(:,k) = U;
-        %X_sim(:,k+1) = mpc.A*X_sim(:,k) + mpc.B*U_sim(:,k);
+        X_sim(:,k+1) = mpc.A*X_sim(:,k) + mpc.B*U_sim(:,k);
         newU=U_sim(:,k);
 
     else
         [~, Uopt]=mpc.runMPC(xEst);
 
         if k>=65 && k<75    
-            %Uopt=Uopt+[20;20;20;20];
+            Uopt=Uopt+[20;20;10;10];
         end
-        U_sim(:,k) = Uopt; %+ uRef;
-        %X_sim(:,k+1) = mpc.A*X_sim(:,k) + mpc.B*U_sim(:,k);
-        [T, X] = ode45(@(t, x) f(x, U, params), tspan, X_sim(:,k));
-        X_sim(:, k+1) = X(end, :)';
+        U_sim(:,k) = Uopt;
+        X_sim(:,k+1) = mpc.A*X_sim(:,k) + mpc.B*U_sim(:,k);
+        %[T, X] = ode45(@(t, x) f(x, U, params), tspan, X_sim(:,k));
+        %X_sim(:, k+1) = X(end, :)';
         newU=U_sim(:,k);
         
     end
@@ -153,7 +144,7 @@ for k=1:NT-1
 end
 
 
-%% Plot
+% Plot
 
 figure(1)
 subplot(3,1,1)
