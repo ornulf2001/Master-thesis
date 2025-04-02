@@ -272,6 +272,7 @@ classdef MHEclass_KF_Update
             obj.g(1:obj.nStates) = -2*obj.M*obj.P(1:obj.nStates,1);
             obj.G(1:obj.nStates, 1:obj.nStates) = obj.M;
             
+            
 
             
         end

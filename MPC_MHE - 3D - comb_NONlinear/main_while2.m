@@ -146,14 +146,9 @@ while RunningFlag == true && iterCounter < (NT)
 
 
     if iterCounter==mhe.N_MHE+2
-        mhe.Q = 5e3*mhe.Q; 
-        %This relies on having enabled dynamic update of arrival cost in MHE. 
-        %That is, G must be updated with the new Q, which is done automatically when 
-        %updating M as well in arrival cost. If this is not done, we must update G here also.
-
-        %Actually, this currently isnt being updated I think. The
-        %performance is kinda bad because of it, I disabled rebuilding G in
-        %the loop with this because it was slow.
+        mhe.Q = 5e3*mhe.Q;
+        mhe.G(mhe.nStates*(mhe.N_MHE+1)+1:mhe.nStates*(mhe.N_MHE+1)+mhe.nStates*mhe.N_MHE ,mhe.nStates*(mhe.N_MHE+1)+1:mhe.nStates*(mhe.N_MHE+1)+mhe.nStates*mhe.N_MHE ) = kron(mhe.weightScaling*mhe.Q,eye(mhe.N_MHE));
+        %Here we increase Q after N_MHE+1 iterations when the MHE has calibrated. This seems to improve performance?
     end
 
     
