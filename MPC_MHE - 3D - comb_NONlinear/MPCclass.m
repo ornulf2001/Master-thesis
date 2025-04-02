@@ -21,6 +21,7 @@ classdef MPCclass
         beq
         f
         X0
+        zPrev
         dt
         lb
         ub
@@ -55,15 +56,10 @@ classdef MPCclass
         function obj = initialize(obj)
             obj.A = expm(obj.Ac * obj.dt);
             obj.B = (expm(obj.Ac * obj.dt) - eye(size(obj.Ac))) * (obj.Ac \ obj.Bc);
-            %obj.B = inv(obj.Ac) * (expm(obj.Ac * obj.dt) - eye(size(obj.Ac))) * obj.Bc;
-            %D=0;
-            %C = [eye(3),zeros(3,3)];
-
-            %sysd=c2d(ss(obj.Ac,obj.Bc,C,D),obj.dt,'zoh');
-            %obj.A=sysd.A;
-            %obj.B=sysd.B;
-            [K,P,~] = dlqr(obj.A, obj.B, obj.Q, obj.R);
+            
+            [~,P,~] = dlqr(obj.A, obj.B, obj.Q, obj.R);
             obj.QN = P;
+            obj.zPrev = [obj.X0;zeros(obj.N_MPC*obj.nStates,1);zeros((obj.N_MPC)*obj.nControls,1)];
 
             obj = obj.setupOptimizationProblem();
 
@@ -132,8 +128,9 @@ classdef MPCclass
         
         % uRef = pinv(obj.B) * ((eye(obj.nStates) - obj.A) * obj.xRef);
         obj.beq(1:obj.nStates) = xCurrent;
-        [Zopt, fval, exitflag, output, lambda] = quadprog(2*obj.G, obj.f, [],[],obj.Aeq, obj.beq,obj.lb,obj.ub, [], obj.options);
-        
+        [Zopt, ~, ~, ~, ~] = quadprog(2*obj.G, obj.f, [],[],obj.Aeq, obj.beq,obj.lb,obj.ub, obj.zPrev, obj.options);
+        obj.zPrev=Zopt;
+
         U0 = Zopt((obj.N_MPC+1)*obj.nStates+1 : (obj.N_MPC+1)*obj.nStates + obj.nControls);
         Uopt = U0(1:obj.nControls);
 
