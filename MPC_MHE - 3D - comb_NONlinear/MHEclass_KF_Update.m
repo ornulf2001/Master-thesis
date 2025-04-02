@@ -135,7 +135,7 @@ classdef MHEclass_KF_Update
             obj.G=sparse(obj.G);
         end
         
-        function obj=bufferInitialData(obj, newY, newU)
+        function obj=bufferInitialData(obj, newY, newU) %% This is not in use
             
             %Checking if the horizon is filled
             if obj.yBufferCount > obj.N_MHE + 1 && obj.uBufferCount > obj.N_MHE
@@ -163,7 +163,7 @@ classdef MHEclass_KF_Update
             
         end
         
-        function obj = initialGuessPropegation(obj)
+        function obj = initialGuessPropegation(obj) %% This is not in use
 
             % Start from your known initial state x0
             x_propagated = obj.x0;
@@ -209,14 +209,14 @@ classdef MHEclass_KF_Update
             %Update dynamics constraint with new control input in beq
             obj.beq(1:obj.nStates*obj.N_MHE)=reshape(obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE),obj.nStates*obj.N_MHE,1);
 
-            obj = obj.computeNIS();
+            obj = obj.computeNIS(); %Find current NIS
 
             %solve opt problem, currently only extracting zOpt
             [obj.zOpt, ~, ~, ~,~] = quadprog(2*obj.G, obj.g,[],[], obj.Aeq, obj.beq, [], [], obj.zPrev, obj.options);  
             
-            auxInput=qpOASES_auxInput('x0',obj.zPrev,...
-                                       'guessedWorkingSetB', obj.lastWsetB, ...
-                                       'guessedWorkingSetC', obj.lastWsetC);
+            %auxInput=qpOASES_auxInput('x0',obj.zPrev,...
+            %                           'guessedWorkingSetB', obj.lastWsetB, ...
+            %                           'guessedWorkingSetC', obj.lastWsetC);
             %[obj.zOpt, ~, exitflag, iter, ~,auxOutput] = qpOASES(2*obj.G, obj.g, obj.Aeq, [], [], obj.beq, obj.beq,obj.options,auxInput);
             obj.zPrev = obj.zOpt;
             %obj.lastWsetB = auxOutput.workingSetB;
@@ -225,7 +225,8 @@ classdef MHEclass_KF_Update
             %disp("exitflag: "+ string(exitflag)+", iter: "+ string(iter))
             
 
-            x_zero = obj.zOpt(1:obj.nStates);
+            x_zero = obj.zOpt(1:obj.nStates); %x0 estimate | MHE gives x^= [x0^,x1^,...xk^]
+
             % Extract the control input at the start of the horizon (k-N)
             u_kN = obj.P(obj.nStates+obj.nMeasurements+1:end, 1+(obj.N_MHE+1)+1); % Correct index for u_{k-N}
             
@@ -233,8 +234,8 @@ classdef MHEclass_KF_Update
             x_predicted = obj.A * x_zero + obj.B * u_kN; 
             P_predicted = obj.A * obj.P0 * transpose(obj.A) + inv(obj.Q); % Q_MHE is inverse covariance
             
-            % Extract measurement at k-N+1 (within horizon, not newY)
-            y_k_Nplus1 = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 3); % Index 2 corresponds to k-N+1
+            % Extract measurement at k-N+1 
+            y_k_Nplus1 = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 3); % Index 3 corresponds to k-N+1
             
             % Compute innovation using the correct measurement
             innovation = y_k_Nplus1 - obj.C * x_predicted;
@@ -250,34 +251,32 @@ classdef MHEclass_KF_Update
             
             % Regularize P_corrected before inverting
             P_reg = P_corrected+ 1e-6 * eye(obj.nStates);
-            obj.P0 = P_reg;
-            newM = obj.weightScaling*inv(P_reg);
+            obj.P0 = P_reg; %Update arrival cost covariance initial guess
+            newM = obj.weightScaling*inv(P_reg); %Calculate new arrival cost weight
           
-            obj.xprior = obj.zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior as the next element after x0 for next iteration
-            %obj.xprior = x_corrected;
+            obj.xprior = obj.zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior in arrival cost as x1^ from MHE
+            %obj.xprior = x_corrected; %Could instead update xprior as the x_corrected (propagated KF style from x0^)
 
-            %priorError=obj.xprior - x_corrected
+            %Only update M ever 2 iteration, this logic could probably be improved
             if mod(obj.iterations,2)==0
                 newM=1/2*(newM+transpose(newM));
                 obj.M=newM;
             end
             
 
-            obj.xCurrent=obj.zOpt(obj.nStates*obj.N_MHE + 1 : obj.nStates*(obj.N_MHE + 1)); %Extract current state estimate xk as the last element
+            obj.xCurrent=obj.zOpt(obj.nStates*obj.N_MHE + 1 : obj.nStates*(obj.N_MHE + 1)); %Extract current state estimate xk^
             % Update arrival cost with new xprior
             obj.P(1:obj.nStates,1) = obj.xprior; 
 
+            %Update G and g in cost function
             obj.g(1:obj.nStates) = -2*obj.M*obj.P(1:obj.nStates,1);
-
-            %Update M block in G
             obj.G(1:obj.nStates, 1:obj.nStates) = obj.M;
             
 
-            %disp("x_prop - xEst: "+ num2str(x_prop - obj.xCurrent))
-            %disp("nis: "+num2str(nis))
+            
         end
         
-        function obj = reset(obj, newx0)
+        function obj = reset(obj, newx0) %% This is not in use
             
             %Reset initial condition, xCurrent and run setup again
             obj.x0 = newx0;           
@@ -285,7 +284,9 @@ classdef MHEclass_KF_Update
             obj = obj.setup();  % Reinitialize the matrices if necessary
         end
 
-        function obj = computeNIS(obj)
+        function obj = computeNIS(obj) 
+            
+            %From chatGPT:
             % computeNIS Propagate the arrival cost from k-N to k and compute the NIS.
             % We assume:
             % - The arrival state is stored in obj.P(1:obj.nStates,1)

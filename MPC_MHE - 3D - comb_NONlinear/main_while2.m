@@ -20,6 +20,7 @@ ueq = [0,0,0,0]';
 xlp = xeq;   % 10x1 equilibrium state
 ulp = ueq;
 
+% States: [ x y z phi theta xdot ydot zdot phidot thetadot ]
 [Ac,Bc,C] = linearizeModel(@f,@h,xlp,ulp,params);
 
 
@@ -27,44 +28,50 @@ nStates=size(Ac,1);
 nControls = size(Bc,2);
 nMeasurements = size(C,1);
 
+
+
 %% Tuning
 xRef = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0];
 X0=[0.001;0.001;zeq;0;0;0;0;0;0;0;];
 NT=500;
 
 N_MHE=15;
-N_MPC=5;
+N_MPC=10;
 dt=0.003;
 
 
-% States: | x y z phi theta xdot ydot zdot phidot thetadot |
 
+%MHE tuning
 alpha_NEES=0.7;
 noise_std=0.1*1e-3; %mT
-R_MHE=inv(noise_std^2*eye(nMeasurements));         
+R_MHE=inv(noise_std^2*eye(nMeasurements));  %Measurement noise weight = inv(measurement noise cov)      
 Q_MHE=10e6*diag([100,100,100,100,100,100,100,100,100,100]); 
     %Start out with low Q to trust measurements during start up, 
     %then increase Q after N_MHE+1. 
     %See below in loop
                                   
 
-M_MHE = 1e2*diag([5,5,5,0.005,005,0.002,0.002,0.002,0.0001,0.0001]);
-P0 = inv(M_MHE);
+M_MHE = 1e2*diag([5,5,5,0.005,005,0.002,0.002,0.002,0.0001,0.0001]); %Arrival cost weight initial guess (updates KF-style in loop)
+P0 = inv(M_MHE); % Arrival cost cov initial guess.
+weightScaling=1e-4; %Scaling factor for better posing of hessian
 
+%MPC and LQR tuning
 Q_MPC = diag([500 500 2000 10 10 1 1 10 1 1]);
-    R_MPC = diag([0.2 0.2 0.2 0.2]);
+R_MPC = diag([0.2 0.2 0.2 0.2]);
 
 Q_LQR = diag([ ...
    1e1,1e1,1e1,1e1,1e1, ...
    1e1,1e1,1e5,1e1,1e1
    ]);
 R_LQR = 1e2*eye(4);
-weightScaling=1e-4;
 
 % Bounds
-run("mpc_bounds.m")
+run("mpc_bounds.m") %currently inf all over
 
-% Run
+
+
+%% Run
+
 %MHE_options = qpOASES_options();
 MHE_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
 mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,weightScaling,X0,xlp,P0,dt,MHE_options);
@@ -72,6 +79,7 @@ mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,weightScaling,X0,xlp,P0
 MPC_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
 mpc = MPCclass(N_MPC, Ac, Bc, X0, dt, [], [], Q_MPC, R_MPC, nStates, nControls,MPC_options, xRef, [], []);
 
+%Init
 X_sim = zeros(nStates, NT);
 U_sim = zeros(nControls, NT-1);
 MHE_est = zeros(nStates, NT);
@@ -86,11 +94,9 @@ Innovations_traj = zeros(nMeasurements,NT-1);
 newY=yNext(:,1);
 xNext = X0;
 X_sim(:, 1) = X0;
-error=[];
 tspan = [0, dt];
 
-% Calculating the reference input for stabilizing in the reference point
-uRef = mpc.computeReferenceInput();
+uRef = mpc.computeReferenceInput(); % Calculating the reference input for stabilizing in the reference point
 
 iterCounter = 1;
 switchCounter = 0;
@@ -108,6 +114,13 @@ useAdvancedControl = false;
 
 profile clear
 profile on
+
+%loop
+
+%Current switching logic: 
+%If NIS is inside bounds: increase switchCounter, if Nis exits bounds: reduce switchCounter. 
+%Whenever switchCounter > switchThreshold: use advanced control, else use LQR.
+%This hopefully leads to a smoother transition between control types.
 while RunningFlag == true && iterCounter < (NT)
     t_start = tic;
     k=iterCounter;
@@ -133,13 +146,16 @@ while RunningFlag == true && iterCounter < (NT)
 
 
     if iterCounter==mhe.N_MHE+2
-        mhe.Q = 5e3*mhe.Q; %This relies on having enabled dynamic update of arrival cost in MHE. 
-                           %That is, G must be updated with the new Q, which is done automatically when 
-                           %updating M as well in arrival cost. If this is not done, we must update G here also.
+        mhe.Q = 5e3*mhe.Q; 
+        %This relies on having enabled dynamic update of arrival cost in MHE. 
+        %That is, G must be updated with the new Q, which is done automatically when 
+        %updating M as well in arrival cost. If this is not done, we must update G here also.
+
+        %Actually, this currently isnt being updated I think. The
+        %performance is kinda bad because of it, I disabled rebuilding G in
+        %the loop with this because it was slow.
     end
 
-    
-    
     
     if useAdvancedControl
         [~, Uopt]=mpc.runMPC(xEst);
@@ -152,17 +168,18 @@ while RunningFlag == true && iterCounter < (NT)
 
 
     [~, X] = ode45(@(t, x) f(x, U, params), tspan, X_sim(:,k));
-    X_sim(:, k+1) = X(end, :)';
-    U_sim(:,k) = U;
-    newU=U_sim(:,k);
+    X_sim(:, k+1) = X(end, :)'; %Store next x
+    U_sim(:,k) = U; %Store U
+    newU=U_sim(:,k); %For MHE input
 
     noise=noise_std*randn([nMeasurements,1]);
-    yNext(:,k+1) = C*X_sim(:,k+1)-C*xlp+noise;
-    yNext_f(:,k+1)=alpha_NEES*yNext(:,k+1) + (1-alpha_NEES)*yNext_f(:,k);
-    newY=yNext(:,k+1);
-    mhe=mhe.runMHE(newY,newU);
-    xEst=mhe.xCurrent;
+    yNext(:,k+1) = C*X_sim(:,k+1)-C*xlp+noise; %Subtract xlp to correct the frame of ref (?)
+    yNext_f(:,k+1)=alpha_NEES*yNext(:,k+1) + (1-alpha_NEES)*yNext_f(:,k); %EMA prefilter before MHE
+    newY=yNext(:,k+1); %For MHE input
+    mhe=mhe.runMHE(newY,newU); %Estimate xk with MHE
+    xEst=mhe.xCurrent; %xk^
     MHE_est(:,k+1)=xEst;
+
     NIS_current=mhe.currentNIS;
     NIS_traj(k) = NIS_current;
     Innovations_traj(:,k)=mhe.currentInnovation;
@@ -342,6 +359,6 @@ end
 
 
 
-function gamma = gamma_f(k,fade_period)
+function gamma = gamma_f(k,fade_period) %Not in use, old fading factor [0,1] to switch from LQR to MPC
     gamma = (k-fade_period(1))/(fade_period(end)-fade_period(1));
 end
