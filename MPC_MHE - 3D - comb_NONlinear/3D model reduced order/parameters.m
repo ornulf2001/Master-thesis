@@ -37,14 +37,14 @@ function params = parameters()
     % ------------------------------
     % Base Magnets and Sensors
     % ------------------------------
-    params.r_base_array = 0.023*[  
+    params.r_base_array = 0.025*[  
         1, -1,  0,  0;
         0,  0,  1, -1;
         0,  0,  0,  0 ];
     
     params.r_sensor_array = 0.01*[  
-        0,   1,   0;
-        0,   0,   1;
+        0,   -3.2,   1.5;
+        0,   1.4,   3.2;
         0,   0,   0];
     
     % ------------------------------

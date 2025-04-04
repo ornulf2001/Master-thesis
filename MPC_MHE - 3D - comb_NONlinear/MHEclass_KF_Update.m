@@ -271,7 +271,7 @@ classdef MHEclass_KF_Update
             %Update G and g in cost function
             obj.g(1:obj.nStates) = -2*obj.M*obj.P(1:obj.nStates,1);
             obj.G(1:obj.nStates, 1:obj.nStates) = obj.M;
-            
+
             
 
             

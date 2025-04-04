@@ -35,17 +35,17 @@ xRef = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0];
 X0=[0.001;0.001;zeq;0;0;0;0;0;0;0;];
 NT=500;
 
-N_MHE=15;
+N_MHE=10;
 N_MPC=10;
 dt=0.003;
 
 
 
 %MHE tuning
-alpha_NEES=0.7;
+alpha=0.9;
 noise_std=0.1*1e-3; %mT
 R_MHE=inv(noise_std^2*eye(nMeasurements));  %Measurement noise weight = inv(measurement noise cov)      
-Q_MHE=10e6*diag([100,100,100,100,100,100,100,100,100,100]); 
+Q_MHE=10e6*diag([100,100,10,10,100,100,100,100,100,10]); 
     %Start out with low Q to trust measurements during start up, 
     %then increase Q after N_MHE+1. 
     %See below in loop
@@ -73,7 +73,7 @@ run("mpc_bounds.m") %currently inf all over
 %% Run
 
 %MHE_options = qpOASES_options();
-MHE_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
+MHE_options = optimset('Display','on', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
 mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,weightScaling,X0,xlp,P0,dt,MHE_options);
 
 MPC_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
@@ -129,6 +129,9 @@ while RunningFlag == true && iterCounter < (NT)
 
     if (NIS_current) >= lowerBound_NIS && (NIS_current <= upperBound_NIS)
         switchCounter = switchCounter + 1;
+        if switchCounter > 2*switchThreshold
+            switchCounter = 2*switchThreshold;
+        end
     else
         switchCounter = switchCounter - 3;
         if switchCounter <0
@@ -162,15 +165,16 @@ while RunningFlag == true && iterCounter < (NT)
         
 
 
-    [~, X] = ode45(@(t, x) f(x, U, params), tspan, X_sim(:,k));
-    X_sim(:, k+1) = X(end, :)'; %Store next x
+    %[~, X] = ode45(@(t, x) f(x, U, params), tspan, X_sim(:,k));
+    %X_sim(:, k+1) = X(end, :)'; %Store next x
+    X_sim(:,k+1) = RK4Step(@f, X_sim(:,k), U, dt, params);
     U_sim(:,k) = U; %Store U
     newU=U_sim(:,k); %For MHE input
 
     noise=noise_std*randn([nMeasurements,1]);
     yNext(:,k+1) = C*X_sim(:,k+1)-C*xlp+noise; %Subtract xlp to correct the frame of ref (?)
-    yNext_f(:,k+1)=alpha_NEES*yNext(:,k+1) + (1-alpha_NEES)*yNext_f(:,k); %EMA prefilter before MHE
-    newY=yNext(:,k+1); %For MHE input
+    yNext_f(:,k+1)=alpha*yNext(:,k+1) + (1-alpha)*yNext_f(:,k); %EMA prefilter before MHE
+    newY=yNext_f(:,k+1); %For MHE input
     mhe=mhe.runMHE(newY,newU); %Estimate xk with MHE
     xEst=mhe.xCurrent; %xk^
     MHE_est(:,k+1)=xEst;
@@ -312,7 +316,7 @@ upperBound_NEES = chi2inv(1 - alpha_NEES/2, dof_NEES);
 
 figure(7);
 clf
-plot(NEES_traj(35:end), 'LineWidth', 1.5); hold on;
+plot(NEES_traj(60:end), 'LineWidth', 1.5); hold on;
 yline(lowerBound_NEES, '--r', 'LineWidth', 1.5);
 yline(upperBound_NEES, '--r', 'LineWidth', 1.5);
 xlabel('Time');
@@ -332,7 +336,7 @@ legend('NEES', 'Lower 95% bound', 'Upper 95% bound');
 
 allPassed=true;
 for innov_var=1:nMeasurements
-    [hj,pj]=lbqtest(Innovations_traj(innov_var,N_MHE+1:end));
+    [hj,pj]=lbqtest(Innovations_traj(innov_var,60:end));
     if hj~=0
         disp(['Innovations for state ' num2str(innov_var) ' did not pass the Ljung-Box test. P = ' num2str(pj)])
         allPassed=false;
@@ -356,4 +360,13 @@ end
 
 function gamma = gamma_f(k,fade_period) %Not in use, old fading factor [0,1] to switch from LQR to MPC
     gamma = (k-fade_period(1))/(fade_period(end)-fade_period(1));
+end
+
+function x_next = RK4Step(f,x,U,dt,params)
+    k1 = f(x,U,params);
+    k2 = f(x+0.5*dt*k1,U,params);
+    k3 = f(x+0.5*dt*k2,U,params);
+    k4 = f(x + dt*k3, U, params);
+
+    x_next = x+(dt/6)*(k1+2*k2+2*k3+k4);
 end
