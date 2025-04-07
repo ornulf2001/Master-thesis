@@ -32,7 +32,7 @@ nMeasurements = size(C,1);
 
 %% Tuning
 xRef = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0];
-X0=[0.001;0.001;zeq;0;0;0;0;0;0;0;];
+X0=[0.003;0.003;zeq+0.002;0;0;0;0;0;0;0;];
 NT=500;
 
 N_MHE=10;
@@ -74,7 +74,7 @@ run("mpc_bounds.m") %currently inf all over
 
 %MHE_options = qpOASES_options();
 MHE_options = optimset('Display','on', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
-mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,weightScaling,X0,xlp,P0,dt,MHE_options);
+mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,weightScaling,X0-xlp,xlp,P0,dt,MHE_options);
 
 MPC_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
 mpc = MPCclass(N_MPC, Ac, Bc, X0, dt, [], [], Q_MPC, R_MPC, nStates, nControls,MPC_options, xRef, [], []);
@@ -278,7 +278,7 @@ mhe_meas=C*MHE_est;
 figure(5)
 clf
 subplot(3,1,1)
-var=1;
+var=7;
 plot(yNext_f(var,:)); hold on
 plot(mhe_meas(var,:))
 legend(["meas","est"])
@@ -352,7 +352,13 @@ if allPassed==true
 end
 
 
-
+%%
+figure(100)
+plot(U_sim(1,:)); hold on
+plot(U_sim(2,:));
+plot(U_sim(3,:)); 
+plot(U_sim(4,:)); 
+legend(["Ixplus","Ixminus","Iyplus","Iyminus"])
 
 
 

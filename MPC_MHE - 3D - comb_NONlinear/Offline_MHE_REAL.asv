@@ -70,11 +70,13 @@ weightScaling=1; %Scaling factor for better pos
 %%
 Y_noisy=[data.y.bx0';data.y.by0';data.y.bz0';data.y.bx1';data.y.by1';data.y.bz1';data.y.bx2';data.y.by2';data.y.bz2']*1e-3;
 R_MHE=inv(cov(Y_noisy'));
+%Ip=data.u.Ix_plus';
+%In=data.u.Ix_minus';
 
-U_list = [data.u.Ix_plus';data.u.Iy_plus';data.u.Ix_minus';data.u.Iy_minus'];
-%U_list = [data.u.Iy_minus';data.u.Ix_minus';data.u.Iy_plus';data.u.Ix_plus'];
+%U_list = [data.u.Ix_plus';data.u.Iy_plus';data.u.Ix_minus';data.u.Iy_minus'];
+U_list = [data.u.Iy_minus';data.u.Ix_minus';data.u.Iy_plus';data.u.Ix_plus'];
 
-%% Run
+%%
 MHE_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
 mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,weightScaling,X0,xlp,P0,dt,MHE_options);
 NT=ceil(size(Y_noisy,2)/1.5);
@@ -91,7 +93,13 @@ iter_class=0;
 for k=1:NT-1
     k
     
-   
+    if k==mhe.N_MHE+2
+       %mhe.Q = 5e3*mhe.Q; %This relies on having enabled dynamic update of arrival cost in MHE. 
+                           %That is, G must be updated with the new Q, which is done automatically when 
+                           %updating M as well in arrival cost. If this is not done, we must update G here also.
+        %mhe.G(mhe.nStates*(mhe.N_MHE+1)+1:mhe.nStates*(mhe.N_MHE+1)+mhe.nStates*mhe.N_MHE ,mhe.nStates*(mhe.N_MHE+1)+1:mhe.nStates*(mhe.N_MHE+1)+mhe.nStates*mhe.N_MHE ) = kron(mhe.weightScaling*mhe.Q,eye(mhe.N_MHE));
+        %disp(mhe.P)
+    end
 
     
     newY=Y_noisy(:,k+1);
@@ -122,7 +130,7 @@ end
 
 %%
 est_meas=C*(xsol2);
-Y_noisy=Y_noisy+C*xlp;
+YNo
 
 figure(1)
 clf

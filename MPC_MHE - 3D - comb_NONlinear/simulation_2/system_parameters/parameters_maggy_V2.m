@@ -26,14 +26,14 @@ params.permanent.J  = 1.1;
 params.magnet.r     = 0.02;                                              
 params.magnet.l     = 0.005;                                           
 params.magnet.J     = -1.0;                                           
-params.magnet.m     = 0.077;                                              
+params.magnet.m     = 0.075;                                              
 params.magnet.I     = [6.1686e-06, 6.1686e-06, 1.1274e-05];                
 params.magnet.n     = 100;                                                 
 
 % Sensors
-params.sensors.x  = [0, 0.015, 0.015];
-params.sensors.y  = [0, 0.015, -0.015];
-params.sensors.z  = [0, 0, 0];
+params.sensors.x  = 0.01* [0, 1.4,  -3.3];
+params.sensors.y  = 0.01* [0.7, 3.3, 1.4];
+params.sensors.z  = 0.01* [0, 0  ,  0  ];
 
 % Physical constants
 params.physical.g   = 9.81;                                                % Gravitational acceleration [m/s^2]

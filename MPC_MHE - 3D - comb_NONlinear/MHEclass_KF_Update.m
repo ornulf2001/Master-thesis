@@ -57,7 +57,7 @@ classdef MHEclass_KF_Update
             obj.C = C;
             obj.dt = dt;
             obj.xlp = xlp;
-            obj.x0 = x0-obj.xlp;
+            obj.x0 = x0;
             obj.P0 = P0;
             obj.nStates= size(Ac,1);
             obj.nControls = size(Bc,2);
@@ -74,8 +74,11 @@ classdef MHEclass_KF_Update
             
             % Discretizing dynamics and initializing P. 
             obj.A = expm(obj.Ac * obj.dt);
-            %obj.B = (obj.A - eye(size(obj.Ac))) * (obj.Ac \ obj.Bc);
-            obj.B = inv(obj.Ac) * (expm(obj.Ac * obj.dt) - eye(size(obj.Ac))) * obj.Bc;
+            obj.B = (obj.A - eye(size(obj.Ac))) * (obj.Ac \ obj.Bc);
+            %obj.B = inv(obj.Ac) * (expm(obj.Ac * obj.dt) - eye(size(obj.Ac))) * obj.Bc;
+            %obj.A=eye(size(obj.Ac))+obj.Ac*obj.dt;
+            %obj.B=obj.Bc*obj.dt;
+
             obj.P = zeros(obj.nStates+obj.nMeasurements+obj.nControls, 1+(obj.N_MHE+1)+obj.N_MHE); 
             obj.P(1:obj.nStates,1)=obj.x0;
             obj.P(obj.nStates + 1:obj.nStates + obj.nMeasurements,2:obj.N_MHE+2)=(obj.C*obj.x0).*ones(obj.nMeasurements,obj.N_MHE+1);
@@ -104,8 +107,8 @@ classdef MHEclass_KF_Update
             
             % Constructing G
             cost_X_block = blkdiag(obj.weightScaling*obj.M,zeros(obj.nStates*obj.N_MHE)); %Arrival cost, for x0
-            cost_Q_block = kron(obj.weightScaling*obj.Q,eye(obj.N_MHE)); %Stage costs for process noise, w
-            cost_R_block= kron(obj.weightScaling*obj.R,eye(obj.N_MHE+1)); %stage costs for measurement noise, v
+            cost_Q_block = kron(eye(obj.N_MHE),obj.weightScaling*obj.Q); %Stage costs for process noise, w
+            cost_R_block= kron(eye(obj.N_MHE+1),obj.weightScaling*obj.R); %stage costs for measurement noise, v
             obj.G=blkdiag(cost_X_block,cost_Q_block,cost_R_block);
             
             
@@ -256,12 +259,13 @@ classdef MHEclass_KF_Update
           
             obj.xprior = obj.zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior in arrival cost as x1^ from MHE
             %obj.xprior = x_corrected; %Could instead update xprior as the x_corrected (propagated KF style from x0^)
+            obj.M=1/2*(newM+transpose(newM));
 
             %Only update M ever 2 iteration, this logic could probably be improved
-            if mod(obj.iterations,2)==0
-                newM=1/2*(newM+transpose(newM));
-                obj.M=newM;
-            end
+            % if mod(obj.iterations,1)==0
+            %     newM=1/2*(newM+transpose(newM));
+            %     obj.M=newM;
+            % end
             
 
             obj.xCurrent=obj.zOpt(obj.nStates*obj.N_MHE + 1 : obj.nStates*(obj.N_MHE + 1)); %Extract current state estimate xk^
