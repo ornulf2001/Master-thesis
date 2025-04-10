@@ -33,7 +33,8 @@ ulp = ueq;
 [A,B,C] = linearizeModel(@f, @h, xlp, ulp, params);
 
 % Compute equilibrium measurement
-y_eq = h(xeq, ueq, params);
+yeq = h(xeq, ueq, params);
+yeq = y(end,:)'; % HACK
 
 %% Kalman Filter
 % Dimensions
@@ -49,7 +50,7 @@ P    = zeros(n, n, N);
 P(:,:,1)  = 1e-2*eye(n);
 
 % Covariances
-Q = 1e-1*eye(n);
+Q = 1e4*eye(n);
 R = diag(diag(cov(y(400:end,:))));
 
 % Loop
@@ -57,18 +58,20 @@ for k = 1:N-1
     dt = t(k+1) - t(k);
     
     % Discretization
-    A_d = eye(n) + A*dt;
-    B_d = B*dt;
-    
+    sysd = c2d(ss(A,B,C,0), dt, 'zoh');
+    A_d = sysd.A;
+    B_d = sysd.B;
+
     % Prediction Step:
     xhat_minus = A_d*xhat(:,k) + B_d*(u(k,:)' - ueq);
     P_minus = A_d*P(:,:,k)*A_d' + Q;
     
-    % Measurement Prediction (Adding yeq instead of subtracting)
-    ypred = y_eq + C*(xhat_minus - xeq);
+    % Measurement Prediction
+    ypred = C*xhat_minus;
     
     % Innovation
-    innovation = y(k+1,:)' - ypred;
+    y_unbiased = y(k+1,:)' - yeq;
+    innovation = y_unbiased - ypred;
     
     % Kalman Gain computation
     K = P_minus*C'/(C*P_minus*C' + R);
@@ -79,29 +82,30 @@ for k = 1:N-1
 end
 
 % Recompute estimated y
-yhat = repmat(y_eq, 1, N) + C*(xhat - repmat(xeq, 1, N));
+yhat = C*xhat + yeq;
+xhat = xhat + xeq;
 
 %% Plot measured vs estimated outputs
 figure(2);
 clf; hold on; box on;
+
 plot(t,y(:,1:6), 'b-')
-YLIM = ylim();
+
+%YLIM = ylim();
+
 plot(t,yhat(1:6,:)', 'r--')
-ylim(YLIM)
+yline(yeq(1:6), 'g-', 'LineWidth', 2)
+
+%ylim(YLIM)
+
 xlabel('Time (s)')
 ylabel('Sensor Measurements')
 legend({'Measured y','','','Estimated yhat'})
 
 figure(3);
-clf; 
-subplot(2,1,1);
-hold on; box on;
-plot(t,xhat(1:3,:)', 'b')
-xlabel('Time (s)')
-ylabel('Estimated positions')
+clf; hold on; box on;
+plot(t,xhat(1:3,:))
 
-subplot(2,1,2);
-hold on; box on;
-plot(t,xhat(6:8,:)', 'b')
-xlabel('Time (s)')
-ylabel('Estimated velocities')
+% figure(4);
+% clf; hold on; box on;
+% plot(t,xhat(6:8,:))

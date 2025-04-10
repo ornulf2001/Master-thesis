@@ -19,6 +19,8 @@ classdef MHEclass_KF_Update
         g                 %QP cost vector for linear terms
         Aeq               %QP equality constraint matrix for z, Aeq*z=beq
         beq               %QP equality constraint vector for constant terms
+        lb                %Decision variable constraints lb
+        ub                % ---||--- ^ ub
         f                 %Nonlinear dynamical model, x_{k+1} = f(x_k, u_k) + w_k
         h                 %Nonlinear measurement model y_k = h(x_k, u_k) + v_k
         x0                %Initial condition for states
@@ -27,8 +29,8 @@ classdef MHEclass_KF_Update
         P0                %State covariance
         currentP            %Forward propegated state estimate covariance at k
         xCurrent          %Current state estimate, xk
-        vCurrent
-        wCurrent
+        vCurrent          %Current measurement noise estimate
+        wCurrent          %Current process noise estimate
         currentNIS        %Current NIS
         currentInnovation %Current innovation
         zOpt              %Solution to QP
@@ -138,6 +140,35 @@ classdef MHEclass_KF_Update
             end
             obj.Aeq=sparse(obj.Aeq);
             obj.G=sparse(obj.G);
+
+
+            nX = obj.nStates;
+            N = obj.N_MHE;
+            zDim = length(obj.zPrev);   % total number of decision variables
+            lb = -inf(zDim, 1)         % default lower bound
+            ub =  inf(zDim, 1);         % default upper bound
+            
+            % Constrain z-position (index 3) of all x0...xN to within [z_min, z_max]
+            z_min = 0.02;
+            z_max = 0.1;
+            
+            for j = 0:N
+                idx = j*nX + 3;  % index for z position in x_k
+                lb(idx) = z_min;
+                ub(idx) = z_max;
+            end
+            
+            % Optional: limit zdot (index 8)
+            zdot_min = -2;
+            zdot_max = 2;
+            for j = 0:N
+                idx = j*nX + 8;
+                lb(idx) = zdot_min;
+                ub(idx) = zdot_max;
+            end
+            
+            obj.lb = lb;
+            obj.ub = ub;
         end
         
         function obj=bufferInitialData(obj, newY, newU) %% This is not in use
@@ -287,8 +318,8 @@ classdef MHEclass_KF_Update
             obj.P0 = P_reg; %Update arrival cost covariance initial guess
             newM = obj.weightScaling*inv(P_reg); %Calculate new arrival cost weight
           
-            %obj.xprior = obj.zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior in arrival cost as x1^ from MHE
-            obj.xprior = x_corrected; %Could instead update xprior as the x_corrected (propagated KF style from x0^)
+            obj.xprior = obj.zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior in arrival cost as x1^ from MHE
+            %obj.xprior = x_corrected; %Could instead update xprior as the x_corrected (propagated KF style from x0^)
             obj.M=1/2*(newM+transpose(newM));
 
             %Only update M ever 2 iteration, this logic could probably be improved

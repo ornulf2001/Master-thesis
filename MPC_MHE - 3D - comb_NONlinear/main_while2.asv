@@ -25,7 +25,7 @@ ulp = ueq;
 %Ac=Ac+1*eye(size(Ac));
 %Bc=-Bc;
 %Bc=1.2*Bc;
-%C=1.5*C+[diag(ones(size(C,1),1)),zeros(size(C,1),size(C,2)-size(C,1))];
+C=1.5*C+[diag(ones(size(C,1),1)),zeros(size(C,2))];
 
 nStates=size(Ac,1);
 nControls = size(Bc,2);
@@ -204,21 +204,21 @@ save("U_list_sim","U_sim")
 figure(1)
 clf
 subplot(3,1,1)
-plot(X_sim(1,:), "r-"); hold on; grid on;
-plot(MHE_est(1,:), "b--")
+plot(X_sim(1,:), "-r"); hold on; grid on;
+plot(MHE_est(1,:), "-b")
 ylabel("x")
 title("Position")
 legend(["sim","est"])
 
 subplot(3,1,2)
-plot(X_sim(2,:), "r-"); hold on; grid on;
-plot(MHE_est(2,:), "b--")
+plot(X_sim(2,:), "-r"); hold on; grid on;
+plot(MHE_est(2,:), "-b")
 ylabel("y")
 legend(["sim","est"])
 
 subplot(3,1,3)
-plot(X_sim(3,:), "r-"); hold on; grid on;
-plot(MHE_est(3,:)+zeq, "b--")
+plot(X_sim(3,:), "-r"); hold on; grid on;
+plot(MHE_est(3,:)+zeq, "-b")
 ylabel("z")
 xlabel("iterations")
 legend(["sim","est"])
@@ -227,15 +227,15 @@ legend(["sim","est"])
 figure(2)
 clf
 subplot(2,1,1)
-plot(X_sim(4,:), "r-"); hold on; grid on;
-plot(MHE_est(4,:), "b--")
+plot(X_sim(4,:), "-r"); hold on; grid on;
+plot(MHE_est(4,:), "-b")
 ylabel("phi")
 title("Angles")
 legend(["sim","est"])
 
 subplot(2,1,2)
-plot(X_sim(5,:), "r-"); hold on; grid on;
-plot(MHE_est(5,:), "b--")
+plot(X_sim(5,:), "-r"); hold on; grid on;
+plot(MHE_est(5,:), "-b")
 ylabel("theta")
 xlabel("iterations")
 legend(["sim","est"])
@@ -244,21 +244,21 @@ legend(["sim","est"])
 figure(3)
 clf
 subplot(3,1,1)
-plot(X_sim(6,:), "r-"); hold on; grid on;
-plot(MHE_est(6,:), "b--")
+plot(X_sim(6,:), "-r"); hold on; grid on;
+plot(MHE_est(6,:), "-b")
 ylabel("xdot")
 title("Velocity")
 legend(["sim","est"])
 
 subplot(3,1,2)
-plot(X_sim(7,:), "r-"); hold on; grid on;
-plot(MHE_est(7,:), "b--")
+plot(X_sim(7,:), "-r"); hold on; grid on;
+plot(MHE_est(7,:), "-b")
 ylabel("ydot")
 legend(["sim","est"])
 
 subplot(3,1,3)
-plot(X_sim(8,:), "r-"); hold on; grid on;
-plot(MHE_est(8,:), "b--")
+plot(X_sim(8,:), "-r"); hold on; grid on;
+plot(MHE_est(8,:), "-b")
 ylabel("zdot")
 xlabel("iterations")
 legend(["sim","est"])
@@ -267,15 +267,15 @@ legend(["sim","est"])
 figure(4)
 clf
 subplot(2,1,1)
-plot(X_sim(9,:), "r-"); hold on; grid on;
-plot(MHE_est(9,:), "b--")
+plot(X_sim(9,:), "-r"); hold on; grid on;
+plot(MHE_est(9,:), "-b")
 ylabel("phidot")
 title("Angular velocity")
 legend(["sim","est"])
 
 subplot(2,1,2)
-plot(X_sim(10,:), "r-"); hold on; grid on;
-plot(MHE_est(10,:), "b--")
+plot(X_sim(10,:), "-r"); hold on; grid on;
+plot(MHE_est(10,:), "-b")
 ylabel("thetadot")
 xlabel("iterations")
 legend(["sim","est"])
