@@ -27,6 +27,8 @@ classdef MHEclass_KF_Update
         P0                %State covariance
         currentP            %Forward propegated state estimate covariance at k
         xCurrent          %Current state estimate, xk
+        vCurrent
+        wCurrent
         currentNIS        %Current NIS
         currentInnovation %Current innovation
         zOpt              %Solution to QP
@@ -82,7 +84,7 @@ classdef MHEclass_KF_Update
             obj.P = zeros(obj.nStates+obj.nMeasurements+obj.nControls, 1+(obj.N_MHE+1)+obj.N_MHE); 
             obj.P(1:obj.nStates,1)=obj.x0;
             obj.P(obj.nStates + 1:obj.nStates + obj.nMeasurements,2:obj.N_MHE+2)=(obj.C*obj.x0).*ones(obj.nMeasurements,obj.N_MHE+1);
-            
+            %obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2) = obj.C*obj.x0;
             obj.zPrev = [obj.x0;zeros(obj.N_MHE*obj.nStates,1);zeros(obj.N_MHE*obj.nStates,1);zeros((obj.N_MHE+1)*obj.nMeasurements,1)];
 
             nVars = length(obj.zPrev);          % Total number of decision variables
@@ -199,21 +201,49 @@ classdef MHEclass_KF_Update
         function obj=runMHE(obj,newY,newU)
             obj.iterations = obj.iterations+1;
             
-            
+
+            % Row and column indices for control-block and measurement-block in P
+            ctrl_start = obj.nStates + obj.nMeasurements + 1;
+            ctrl_end   = ctrl_start + obj.nControls - 1;
+            col_ctrl_start = 1 + (obj.N_MHE+1) + 1;
+            col_ctrl_end   = 1 + (obj.N_MHE+1) + obj.N_MHE;
+            meas_start = obj.nStates + 1;
+            meas_end   = obj.nStates + obj.nMeasurements;
+            col_meas_start = 2;
+            col_meas_end = 1 + (obj.N_MHE+1);  % which equals N_MHE + 2
+
+            if obj.N_MHE == 1
+                % For a one-step horizon, just assign newU to the only control column.
+                obj.P(ctrl_start:ctrl_end, col_ctrl_start) = newU;
+            else
+                % For N_MHE > 1, shift left by one column and insert the new control.
+                obj.P(ctrl_start:ctrl_end, col_ctrl_start:col_ctrl_end) = ...
+                    [ obj.P(ctrl_start:ctrl_end, col_ctrl_start+1:col_ctrl_end), newU ];
+            end
+
+            obj.P(meas_start:meas_end, col_meas_start:col_meas_end) = ...
+                [ obj.P(meas_start:meas_end, col_meas_start+1:col_meas_end), newY ];
+
+            %disp("P after shift")
+            %disp(obj.P)
             %Shift measurement window with new measurement
-            obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2:obj.N_MHE+2)=[obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 3:obj.N_MHE+2),newY]; 
+            %obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2:obj.N_MHE+2)=[obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 3:obj.N_MHE+2),newY]; 
     
             %Shift control input window with new control input
-            obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE)=[obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1+1:1+(obj.N_MHE+1)+obj.N_MHE),newU]; 
+            %obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE)=[obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1+1:1+(obj.N_MHE+1)+obj.N_MHE),newU]; 
             
             %update the C*Xk + Vk = Ymeas,k constraint with new measurement in beq
-            obj.beq(obj.nStates*obj.N_MHE+1 : obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.N_MHE+1)) = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2:obj.N_MHE+2); 
+            obj.beq(obj.nStates*obj.N_MHE+1 : obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.N_MHE+1)) = reshape( obj.P(meas_start:meas_end, col_meas_start:col_meas_end), [], 1 );
 
             %Update dynamics constraint with new control input in beq
-            obj.beq(1:obj.nStates*obj.N_MHE)=reshape(obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE),obj.nStates*obj.N_MHE,1);
+            %obj.beq(1:obj.nStates*obj.N_MHE)=reshape(obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE),obj.nStates*obj.N_MHE,1);
+            obj.beq(1:obj.nStates*obj.N_MHE) = reshape(...
+                obj.B * obj.P(ctrl_start:ctrl_end, col_ctrl_start:col_ctrl_end), ...
+                    obj.nStates*obj.N_MHE, 1);
+
 
             obj = obj.computeNIS(); %Find current NIS
-
+           
             %solve opt problem, currently only extracting zOpt
             [obj.zOpt, ~, ~, ~,~] = quadprog(2*obj.G, obj.g,[],[], obj.Aeq, obj.beq, [], [], obj.zPrev, obj.options);  
             
@@ -246,19 +276,19 @@ classdef MHEclass_KF_Update
             % Kalman gain and update
             S_cov_upd = obj.C * P_predicted * transpose(obj.C) + inv(obj.R);
             % Regularize S_cov_upd to avoid numerical issues
-            S_reg = S_cov_upd+ 1e-6 * eye(size(S_cov_upd));
+            S_reg = S_cov_upd;%+ 1e-6 * eye(size(S_cov_upd));
             kalman_gain = P_predicted * transpose(obj.C)/S_reg; % Use matrix division for stability
             
             x_corrected = x_predicted + kalman_gain * innovation;
             P_corrected = (eye(obj.nStates) - kalman_gain * obj.C) * P_predicted * transpose((eye(obj.nStates)-kalman_gain*obj.C)) + kalman_gain*inv(obj.R)*transpose(kalman_gain);
             
             % Regularize P_corrected before inverting
-            P_reg = P_corrected+ 1e-6 * eye(obj.nStates);
+            P_reg = P_corrected;%+ 1e-6 * eye(obj.nStates);
             obj.P0 = P_reg; %Update arrival cost covariance initial guess
             newM = obj.weightScaling*inv(P_reg); %Calculate new arrival cost weight
           
-            obj.xprior = obj.zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior in arrival cost as x1^ from MHE
-            %obj.xprior = x_corrected; %Could instead update xprior as the x_corrected (propagated KF style from x0^)
+            %obj.xprior = obj.zOpt(obj.nStates + 1 : 2 * obj.nStates);  %Update xprior in arrival cost as x1^ from MHE
+            obj.xprior = x_corrected; %Could instead update xprior as the x_corrected (propagated KF style from x0^)
             obj.M=1/2*(newM+transpose(newM));
 
             %Only update M ever 2 iteration, this logic could probably be improved
@@ -269,6 +299,8 @@ classdef MHEclass_KF_Update
             
 
             obj.xCurrent=obj.zOpt(obj.nStates*obj.N_MHE + 1 : obj.nStates*(obj.N_MHE + 1)); %Extract current state estimate xk^
+            obj.vCurrent=obj.zOpt(obj.nStates*(obj.N_MHE+1) + obj.nStates*obj.N_MHE+obj.nMeasurements*obj.N_MHE+1: obj.nStates*(obj.N_MHE+1) + obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.N_MHE+1));
+            obj.wCurrent=obj.zOpt(obj.nStates*(obj.N_MHE+1)+obj.nStates*obj.N_MHE+1:obj.nStates*(obj.N_MHE+1)+obj.nStates*(obj.N_MHE+1) );
             % Update arrival cost with new xprior
             obj.P(1:obj.nStates,1) = obj.xprior; 
 

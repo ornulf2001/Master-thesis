@@ -36,12 +36,14 @@ function [A,B,C] = linearizeModel(f,h,xlp,ulp,params)
     for i = 1:nx
         xp = xlp;
         xn = xlp;
+        up = ulp;
+        un = ulp;
     
         xp(i) = xp(i) + delta;
         xn(i) = xn(i) - delta;
         
-        yp = h(xp, params);
-        yn = h(xn, params);
+        yp = h(xp,up, params);
+        yn = h(xn,un, params);
         
         C(:, i) = (yp - yn)/(2*delta);
     end

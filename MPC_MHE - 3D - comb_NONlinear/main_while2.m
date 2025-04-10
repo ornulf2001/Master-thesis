@@ -1,6 +1,6 @@
 clc,clear
 %addpath(genpath("3D model"))
-addpath(genpath('3D model reduced order'))
+addpath(genpath('3D model reduced order_fixed'))
 addpath(genpath('../qpOASES/interfaces/matlab'))
 
 
@@ -35,7 +35,7 @@ xRef = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0];
 X0=[0.003;0.003;zeq+0.002;0;0;0;0;0;0;0;];
 NT=500;
 
-N_MHE=10;
+N_MHE=15;
 N_MPC=10;
 dt=0.003;
 
@@ -51,7 +51,7 @@ Q_MHE=10e6*diag([100,100,10,10,100,100,100,100,100,10]);
     %See below in loop
                                   
 
-M_MHE = 1e2*diag([5,5,5,0.005,005,0.002,0.002,0.002,0.0001,0.0001]); %Arrival cost weight initial guess (updates KF-style in loop)
+M_MHE = 1e5*diag([5,5,5,0.005,005,0.002,0.002,0.002,0.0001,0.0001]); %Arrival cost weight initial guess (updates KF-style in loop)
 P0 = inv(M_MHE); % Arrival cost cov initial guess.
 weightScaling=1e-4; %Scaling factor for better posing of hessian
 
@@ -73,7 +73,7 @@ run("mpc_bounds.m") %currently inf all over
 %% Run
 
 %MHE_options = qpOASES_options();
-MHE_options = optimset('Display','on', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
+MHE_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
 mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,weightScaling,X0-xlp,xlp,P0,dt,MHE_options);
 
 MPC_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
@@ -82,6 +82,7 @@ mpc = MPCclass(N_MPC, Ac, Bc, X0, dt, [], [], Q_MPC, R_MPC, nStates, nControls,M
 %Init
 X_sim = zeros(nStates, NT);
 U_sim = zeros(nControls, NT-1);
+vsol = zeros(nMeasurements,NT);
 MHE_est = zeros(nStates, NT);
 MHE_est(:,1)=mhe.x0; xEst = mhe.x0;
 yNext=zeros(nMeasurements,NT);  
@@ -178,6 +179,7 @@ while RunningFlag == true && iterCounter < (NT)
     mhe=mhe.runMHE(newY,newU); %Estimate xk with MHE
     xEst=mhe.xCurrent; %xk^
     MHE_est(:,k+1)=xEst;
+    vsol(:,k+1)=mhe.vCurrent;
 
     NIS_current=mhe.currentNIS;
     NIS_traj(k) = NIS_current;
@@ -190,7 +192,8 @@ while RunningFlag == true && iterCounter < (NT)
     %RunningFlag=false;
 end
 profile off
-
+save("Y_noisy_sim","yNext_f")
+save("U_list_sim","U_sim")
 %% Plot
 
 figure(1)
