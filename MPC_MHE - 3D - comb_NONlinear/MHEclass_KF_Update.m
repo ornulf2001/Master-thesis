@@ -77,11 +77,11 @@ classdef MHEclass_KF_Update
         function obj=setup(obj)
             
             % Discretizing dynamics and initializing P. 
-            obj.A = expm(obj.Ac * obj.dt);
-            obj.B = (obj.A - eye(size(obj.Ac))) * (obj.Ac \ obj.Bc);
+            %obj.A = expm(obj.Ac * obj.dt);
+            %obj.B = (obj.A - eye(size(obj.Ac))) * (obj.Ac \ obj.Bc);
             %obj.B = inv(obj.Ac) * (expm(obj.Ac * obj.dt) - eye(size(obj.Ac))) * obj.Bc;
-            %obj.A=eye(size(obj.Ac))+obj.Ac*obj.dt;
-            %obj.B=obj.Bc*obj.dt;
+            obj.A=eye(size(obj.Ac))+obj.Ac*obj.dt;
+            obj.B=obj.Bc*obj.dt;
 
             obj.P = zeros(obj.nStates+obj.nMeasurements+obj.nControls, 1+(obj.N_MHE+1)+obj.N_MHE); 
             obj.P(1:obj.nStates,1)=obj.x0;
@@ -276,8 +276,8 @@ classdef MHEclass_KF_Update
             obj = obj.computeNIS(); %Find current NIS
            
             %solve opt problem, currently only extracting zOpt
-            [obj.zOpt, ~, ~, ~,~] = quadprog(2*obj.G, obj.g,[],[], obj.Aeq, obj.beq, [], [], obj.zPrev, obj.options);  
-            
+            [obj.zOpt, ~, exitflag, ~,~] = quadprog(2*obj.G, obj.g,[],[], obj.Aeq, obj.beq, [], [], obj.zPrev, obj.options);  
+            %disp(exitflag)
             %auxInput=qpOASES_auxInput('x0',obj.zPrev,...
             %                           'guessedWorkingSetB', obj.lastWsetB, ...
             %                           'guessedWorkingSetC', obj.lastWsetC);
@@ -307,14 +307,14 @@ classdef MHEclass_KF_Update
             % Kalman gain and update
             S_cov_upd = obj.C * P_predicted * transpose(obj.C) + inv(obj.R);
             % Regularize S_cov_upd to avoid numerical issues
-            S_reg = S_cov_upd;%+ 1e-6 * eye(size(S_cov_upd));
+            S_reg = S_cov_upd+ 1e-6 * eye(size(S_cov_upd));
             kalman_gain = P_predicted * transpose(obj.C)/S_reg; % Use matrix division for stability
             
             x_corrected = x_predicted + kalman_gain * innovation;
             P_corrected = (eye(obj.nStates) - kalman_gain * obj.C) * P_predicted * transpose((eye(obj.nStates)-kalman_gain*obj.C)) + kalman_gain*inv(obj.R)*transpose(kalman_gain);
             
             % Regularize P_corrected before inverting
-            P_reg = P_corrected;%+ 1e-6 * eye(obj.nStates);
+            P_reg = P_corrected+ 1e-6 * eye(obj.nStates);
             obj.P0 = P_reg; %Update arrival cost covariance initial guess
             newM = obj.weightScaling*inv(P_reg); %Calculate new arrival cost weight
           
