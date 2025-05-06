@@ -1,7 +1,7 @@
 classdef MHEclass_KF_Update
     
     properties
-        N_MHE             %Horizon length #timesteps
+        N             %Horizon length #timesteps
         nStates           %Number of states
         nControls         %Number of control inputs
         nMeasurements     %Number of measurements
@@ -48,10 +48,10 @@ classdef MHEclass_KF_Update
     end
     
     methods
-        function obj = MHEclass_KF_Update(N_MHE, Ac, Bc, C,Q,R,M,weightScaling, x0,xlp,P0, dt,options)
+        function obj = MHEclass_KF_Update(N, Ac, Bc, C,Q,R,M,weightScaling, x0,xlp,P0, dt,options)
             
             %Assigning arguments to class properties
-            obj.N_MHE = N_MHE;
+            obj.N = N;
             obj.Ac = Ac;
             obj.Bc = Bc;
             obj.Q=Q;
@@ -83,18 +83,18 @@ classdef MHEclass_KF_Update
             obj.A=eye(size(obj.Ac))+obj.Ac*obj.dt;
             obj.B=obj.Bc*obj.dt;
 
-            obj.P = zeros(obj.nStates+obj.nMeasurements+obj.nControls, 1+(obj.N_MHE+1)+obj.N_MHE); 
+            obj.P = zeros(obj.nStates+obj.nMeasurements+obj.nControls, 1+(obj.N+1)+obj.N); 
             obj.P(1:obj.nStates,1)=obj.x0;
-            obj.P(obj.nStates + 1:obj.nStates + obj.nMeasurements,2:obj.N_MHE+2)=(obj.C*obj.x0).*ones(obj.nMeasurements,obj.N_MHE+1);
+            obj.P(obj.nStates + 1:obj.nStates + obj.nMeasurements,2:obj.N+2)=(obj.C*obj.x0).*ones(obj.nMeasurements,obj.N+1);
             %obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2) = obj.C*obj.x0;
-            obj.zPrev = [obj.x0;zeros(obj.N_MHE*obj.nStates,1);zeros(obj.N_MHE*obj.nStates,1);zeros((obj.N_MHE+1)*obj.nMeasurements,1)];
+            obj.zPrev = [obj.x0;zeros(obj.N*obj.nStates,1);zeros(obj.N*obj.nStates,1);zeros((obj.N+1)*obj.nMeasurements,1)];
 
             nVars = length(obj.zPrev);          % Total number of decision variables
             nConstr = size(obj.Aeq, 1);         % Total number of general constraints
 
             % On first iteration only:
-            obj.lastWsetB = zeros(nVars, 1);    % No bounds active initially
-            obj.lastWsetC = zeros(nConstr, 1);  % No constraints active initially
+            obj.lastWsetB = zeros(nVars, 1);    % No bounds active
+            obj.lastWsetC = zeros(nConstr, 1);  % No constraints active
 
             % Buffering init
             obj.isReadyToRun = false;
@@ -110,40 +110,39 @@ classdef MHEclass_KF_Update
         function obj=setupOptimizationProblem(obj)
             
             % Constructing G
-            cost_X_block = blkdiag(obj.weightScaling*obj.M,zeros(obj.nStates*obj.N_MHE)); %Arrival cost, for x0
-            cost_Q_block = kron(eye(obj.N_MHE),obj.weightScaling*obj.Q); %Stage costs for process noise, w
-            cost_R_block= kron(eye(obj.N_MHE+1),obj.weightScaling*obj.R); %stage costs for measurement noise, v
+            cost_X_block = blkdiag(obj.weightScaling*obj.M,zeros(obj.nStates*obj.N)); %Arrival cost, for x0
+            cost_Q_block = kron(eye(obj.N),obj.weightScaling*obj.Q); %Stage costs for process noise, w
+            cost_R_block= kron(eye(obj.N+1),obj.weightScaling*obj.R); %stage costs for measurement noise, v
             obj.G=blkdiag(cost_X_block,cost_Q_block,cost_R_block);
             
             
             % Constructing g
-            g_X=[-2*obj.weightScaling*obj.M*obj.P(1:obj.nStates,1);zeros(obj.nStates*obj.N_MHE,1)]; %Arrival cost. Only linear term is -2*M*xprior*x(0)
-            g_W = zeros(obj.nStates * obj.N_MHE, 1);
-            g_V = zeros(obj.nMeasurements * (obj.N_MHE + 1), 1);
+            g_X=[-2*obj.weightScaling*obj.M*obj.P(1:obj.nStates,1);zeros(obj.nStates*obj.N,1)]; %Arrival cost. Only linear term is -2*M*xprior*x(0)
+            g_W = zeros(obj.nStates * obj.N, 1);
+            g_V = zeros(obj.nMeasurements * (obj.N + 1), 1);
             obj.g = [g_X; g_W; g_V];
             
             % Constructing Aeq and beq
-            rows_Aeq= obj.N_MHE*obj.nStates+(obj.N_MHE+1)*obj.nMeasurements;
-            cols_Aeq= (obj.N_MHE+1)*obj.nStates + obj.N_MHE*obj.nStates + (obj.N_MHE+1)*obj.nMeasurements;
+            rows_Aeq= obj.N*obj.nStates+(obj.N+1)*obj.nMeasurements;
+            cols_Aeq= (obj.N+1)*obj.nStates + obj.N*obj.nStates + (obj.N+1)*obj.nMeasurements;
             obj.Aeq =zeros(rows_Aeq,cols_Aeq);
             obj.beq = zeros(rows_Aeq, 1);
             
-            for k = 0:obj.N_MHE-1
+            for k = 0:obj.N-1
                 obj.Aeq(obj.nStates*k+1 : obj.nStates*(k+1), obj.nStates*k+1 : obj.nStates*(k+1)) = -obj.A;
                 obj.Aeq(obj.nStates*k+1 : obj.nStates*(k+1), obj.nStates*(k+1)+1 : obj.nStates*(k+2)) = eye(obj.nStates);
-                obj.Aeq(obj.nStates*k+1 : obj.nStates*(k+1), obj.nStates*(obj.N_MHE+1) + obj.nStates*k + 1 :obj.nStates*(obj.N_MHE+1) + obj.nStates*(k+1)) = -eye(obj.nStates);
+                obj.Aeq(obj.nStates*k+1 : obj.nStates*(k+1), obj.nStates*(obj.N+1) + obj.nStates*k + 1 :obj.nStates*(obj.N+1) + obj.nStates*(k+1)) = -eye(obj.nStates);
             end
             
-            for k=0:obj.N_MHE
-                obj.Aeq(obj.nStates*obj.N_MHE+obj.nMeasurements*k+1 : obj.nStates*obj.N_MHE+obj.nMeasurements*(k+1), obj.nStates*k+1 : obj.nStates*(k+1))=obj.C;
-                obj.Aeq(obj.nStates*obj.N_MHE+obj.nMeasurements*k+1 : obj.nStates*obj.N_MHE+obj.nMeasurements*(k+1), obj.nStates*(obj.N_MHE+1)+obj.nStates*(obj.N_MHE)+obj.nMeasurements*k+1 : obj.nStates*(obj.N_MHE+1)+obj.nStates*(obj.N_MHE)+obj.nMeasurements*(k+1)) = eye(obj.nMeasurements);
+            for k=0:obj.N
+                obj.Aeq(obj.nStates*obj.N+obj.nMeasurements*k+1 : obj.nStates*obj.N+obj.nMeasurements*(k+1), obj.nStates*k+1 : obj.nStates*(k+1))=obj.C;
+                obj.Aeq(obj.nStates*obj.N+obj.nMeasurements*k+1 : obj.nStates*obj.N+obj.nMeasurements*(k+1), obj.nStates*(obj.N+1)+obj.nStates*(obj.N)+obj.nMeasurements*k+1 : obj.nStates*(obj.N+1)+obj.nStates*(obj.N)+obj.nMeasurements*(k+1)) = eye(obj.nMeasurements);
             end
             obj.Aeq=sparse(obj.Aeq);
             obj.G=sparse(obj.G);
 
 
             nX = obj.nStates;
-            N = obj.N_MHE;
             zDim = length(obj.zPrev);   % total number of decision variables
             lb = -inf(zDim, 1)         % default lower bound
             ub =  inf(zDim, 1);         % default upper bound
@@ -152,7 +151,7 @@ classdef MHEclass_KF_Update
             z_min = 0.02;
             z_max = 0.1;
             
-            for j = 0:N
+            for j = 0:obj.N
                 idx = j*nX + 3;  % index for z position in x_k
                 lb(idx) = z_min;
                 ub(idx) = z_max;
@@ -161,7 +160,7 @@ classdef MHEclass_KF_Update
             % Optional: limit zdot (index 8)
             zdot_min = -2;
             zdot_max = 2;
-            for j = 0:N
+            for j = 0:obj.N
                 idx = j*nX + 8;
                 lb(idx) = zdot_min;
                 ub(idx) = zdot_max;
@@ -174,23 +173,22 @@ classdef MHEclass_KF_Update
         function obj=bufferInitialData(obj, newY, newU) %% This is not in use
             
             %Checking if the horizon is filled
-            if obj.yBufferCount > obj.N_MHE + 1 && obj.uBufferCount > obj.N_MHE
-                obj=initialGuessPropegation(obj); %Start propagating initial guess over the first horizon
+            if obj.yBufferCount > obj.N + 1 && obj.uBufferCount > obj.N
                 obj.isReadyToRun = true; % Indicate that the system is ready to start running the MHE
                 return
             end
             
             %Buffer new measurement
-            if obj.yBufferCount <= obj.N_MHE + 1 && ~isempty(newY)
+            if obj.yBufferCount <= obj.N + 1 && ~isempty(newY)
                 obj.P(obj.nStates + 1:obj.nStates + obj.nMeasurements, obj.yBufferCount + 1) = newY;
-                obj.beq(obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.yBufferCount-1)+1 : obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.yBufferCount)) = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, obj.yBufferCount+1);
+                obj.beq(obj.nStates*obj.N+obj.nMeasurements*(obj.yBufferCount-1)+1 : obj.nStates*obj.N+obj.nMeasurements*(obj.yBufferCount)) = obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, obj.yBufferCount+1);
                 obj.yBufferCount=obj.yBufferCount+1;
             end
            
             %Buffer new control input
-            if obj.uBufferCount <= obj.N_MHE && ~isempty(newU)
-                obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+obj.uBufferCount)=newU;
-                obj.beq(obj.nStates*(obj.uBufferCount-1)+1 : obj.nStates*obj.uBufferCount) =  obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,(obj.N_MHE+1)+1+obj.uBufferCount);
+            if obj.uBufferCount <= obj.N && ~isempty(newU)
+                obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N+1)+obj.uBufferCount)=newU;
+                obj.beq(obj.nStates*(obj.uBufferCount-1)+1 : obj.nStates*obj.uBufferCount) =  obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,(obj.N+1)+1+obj.uBufferCount);
                 obj.uBufferCount=obj.uBufferCount+1;
             end
             %^ A biproduct of this solution is that the bufferCounts will
@@ -205,16 +203,16 @@ classdef MHEclass_KF_Update
             x_propagated = obj.x0;
         
             % Example: fill the 'measurement guess' for the first sample
-            %   Suppose columns 2..(N_MHE+2) store the horizon's measured outputs
-            obj.P(obj.nStates+1 : obj.nStates+obj.nMeasurements, 2:1+obj.N_MHE+1) = obj.C * x_propagated;
+            %   Suppose columns 2..(N+2) store the horizon's measured outputs
+            obj.P(obj.nStates+1 : obj.nStates+obj.nMeasurements, 2:1+obj.N+1) = obj.C * x_propagated;
         
-            for i = 1 : obj.N_MHE
+            for i = 1 : obj.N
                 % 1) Choose a nominal guess for the control (often zero):
                 c_i = zeros(obj.nControls,1);
         
                 % 2) Store this nominal control in the correct column
-                %    e.g. columns (N_MHE+2)..(2*N_MHE+1) might hold controls:
-                colControl = (obj.N_MHE+1) + 1 + (i);
+                %    e.g. columns (N+2)..(2*N+1) might hold controls:
+                colControl = (obj.N+1) + 1 + (i);
                 obj.P(obj.nStates+obj.nMeasurements+1 : end, colControl) = c_i;
         
                 % 3) Forward-simulate to get x_{i+1}
@@ -236,18 +234,18 @@ classdef MHEclass_KF_Update
             % Row and column indices for control-block and measurement-block in P
             ctrl_start = obj.nStates + obj.nMeasurements + 1;
             ctrl_end   = ctrl_start + obj.nControls - 1;
-            col_ctrl_start = 1 + (obj.N_MHE+1) + 1;
-            col_ctrl_end   = 1 + (obj.N_MHE+1) + obj.N_MHE;
+            col_ctrl_start = 1 + (obj.N+1) + 1;
+            col_ctrl_end   = 1 + (obj.N+1) + obj.N;
             meas_start = obj.nStates + 1;
             meas_end   = obj.nStates + obj.nMeasurements;
             col_meas_start = 2;
-            col_meas_end = 1 + (obj.N_MHE+1);  % which equals N_MHE + 2
+            col_meas_end = 1 + (obj.N+1);  % which equals N + 2
 
-            if obj.N_MHE == 1
+            if obj.N == 1
                 % For a one-step horizon, just assign newU to the only control column.
                 obj.P(ctrl_start:ctrl_end, col_ctrl_start) = newU;
             else
-                % For N_MHE > 1, shift left by one column and insert the new control.
+                % For N > 1, shift left by one column and insert the new control.
                 obj.P(ctrl_start:ctrl_end, col_ctrl_start:col_ctrl_end) = ...
                     [ obj.P(ctrl_start:ctrl_end, col_ctrl_start+1:col_ctrl_end), newU ];
             end
@@ -258,19 +256,19 @@ classdef MHEclass_KF_Update
             %disp("P after shift")
             %disp(obj.P)
             %Shift measurement window with new measurement
-            %obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2:obj.N_MHE+2)=[obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 3:obj.N_MHE+2),newY]; 
+            %obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 2:obj.N+2)=[obj.P(obj.nStates+1:obj.nStates+obj.nMeasurements, 3:obj.N+2),newY]; 
     
             %Shift control input window with new control input
-            %obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE)=[obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1+1:1+(obj.N_MHE+1)+obj.N_MHE),newU]; 
+            %obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N+1)+1:1+(obj.N+1)+obj.N)=[obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N+1)+1+1:1+(obj.N+1)+obj.N),newU]; 
             
             %update the C*Xk + Vk = Ymeas,k constraint with new measurement in beq
-            obj.beq(obj.nStates*obj.N_MHE+1 : obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.N_MHE+1)) = reshape( obj.P(meas_start:meas_end, col_meas_start:col_meas_end), [], 1 );
+            obj.beq(obj.nStates*obj.N+1 : obj.nStates*obj.N+obj.nMeasurements*(obj.N+1)) = reshape( obj.P(meas_start:meas_end, col_meas_start:col_meas_end), [], 1 );
 
             %Update dynamics constraint with new control input in beq
-            %obj.beq(1:obj.nStates*obj.N_MHE)=reshape(obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N_MHE+1)+1:1+(obj.N_MHE+1)+obj.N_MHE),obj.nStates*obj.N_MHE,1);
-            obj.beq(1:obj.nStates*obj.N_MHE) = reshape(...
+            %obj.beq(1:obj.nStates*obj.N)=reshape(obj.B*obj.P(obj.nStates+obj.nMeasurements+1:obj.nStates+obj.nMeasurements+obj.nControls,1+(obj.N+1)+1:1+(obj.N+1)+obj.N),obj.nStates*obj.N,1);
+            obj.beq(1:obj.nStates*obj.N) = reshape(...
                 obj.B * obj.P(ctrl_start:ctrl_end, col_ctrl_start:col_ctrl_end), ...
-                    obj.nStates*obj.N_MHE, 1);
+                    obj.nStates*obj.N, 1);
 
 
             obj = obj.computeNIS(); %Find current NIS
@@ -292,10 +290,10 @@ classdef MHEclass_KF_Update
             x_zero = obj.zOpt(1:obj.nStates); %x0 estimate | MHE gives x^= [x0^,x1^,...xk^]
 
             % Extract the control input at the start of the horizon (k-N)
-            u_kN = obj.P(obj.nStates+obj.nMeasurements+1:end, 1+(obj.N_MHE+1)+1); % Correct index for u_{k-N}
+            u_zero = obj.P(obj.nStates+obj.nMeasurements+1:end, 1+(obj.N+1)+1); % Correct index for u_{k-N}
             
             % Predict x_zero (k-N) to k-N+1 using u_{k-N}
-            x_predicted = obj.A * x_zero + obj.B * u_kN; 
+            x_predicted = obj.A * x_zero + obj.B * u_zero; 
             P_predicted = obj.A * obj.P0 * transpose(obj.A) + inv(obj.Q); % Q_MHE is inverse covariance
             
             % Extract measurement at k-N+1 
@@ -308,6 +306,7 @@ classdef MHEclass_KF_Update
             S_cov_upd = obj.C * P_predicted * transpose(obj.C) + inv(obj.R);
             % Regularize S_cov_upd to avoid numerical issues
             S_reg = S_cov_upd+ 1e-6 * eye(size(S_cov_upd));
+
             kalman_gain = P_predicted * transpose(obj.C)/S_reg; % Use matrix division for stability
             
             x_corrected = x_predicted + kalman_gain * innovation;
@@ -329,9 +328,9 @@ classdef MHEclass_KF_Update
             % end
             
 
-            obj.xCurrent=obj.zOpt(obj.nStates*obj.N_MHE + 1 : obj.nStates*(obj.N_MHE + 1)); %Extract current state estimate xk^
-            obj.vCurrent=obj.zOpt(obj.nStates*(obj.N_MHE+1) + obj.nStates*obj.N_MHE+obj.nMeasurements*obj.N_MHE+1: obj.nStates*(obj.N_MHE+1) + obj.nStates*obj.N_MHE+obj.nMeasurements*(obj.N_MHE+1));
-            obj.wCurrent=obj.zOpt(obj.nStates*(obj.N_MHE+1)+obj.nStates*obj.N_MHE+1:obj.nStates*(obj.N_MHE+1)+obj.nStates*(obj.N_MHE+1) );
+            obj.xCurrent=obj.zOpt(obj.nStates*obj.N + 1 : obj.nStates*(obj.N + 1)); %Extract current state estimate xk^
+            obj.vCurrent=obj.zOpt(obj.nStates*(obj.N+1) + obj.nStates*obj.N+obj.nMeasurements*obj.N+1: obj.nStates*(obj.N+1) + obj.nStates*obj.N+obj.nMeasurements*(obj.N+1));
+            obj.wCurrent=obj.zOpt(obj.nStates*(obj.N+1)+obj.nStates*obj.N+1:obj.nStates*(obj.N+1)+obj.nStates*(obj.N+1) );
             % Update arrival cost with new xprior
             obj.P(1:obj.nStates,1) = obj.xprior; 
 
@@ -353,78 +352,40 @@ classdef MHEclass_KF_Update
         end
 
         function obj = computeNIS(obj) 
+
+            % Initialize propagation with the arrival state.
+            x_prop = obj.P(1:obj.nStates,1); 
+            P_prop = obj.P0;                  
             
-            %From chatGPT:
-            % computeNIS Propagate the arrival cost from k-N to k and compute the NIS.
-            % We assume:
-            % - The arrival state is stored in obj.P(1:obj.nStates,1)
-            % - The arrival covariance is stored in obj.P0
-            % - The system matrices are obj.A, obj.B, obj.C.
-            % - Process noise covariance is Q_cov = inv(obj.Q)
-            % - Measurement noise covariance is R_cov = inv(obj.R)
-            % - The horizon measurements are stored in columns 2:obj.N_MHE+2 of
-            %   the measurement block: rows (obj.nStates+1:obj.nStates+obj.nMeasurements)
-            % - The horizon controls are stored in columns (1+(obj.N_MHE+1)+1 : 1+(obj.N_MHE+1)+obj.N_MHE)
-            %
-            % The function propagates the state and covariance forward using a discrete-time
-            % KF update for each horizon step and then computes the NIS based on the final innovation.
-            
-            % Define covariances from the weighting (as used in your runMHE)
-            Q_cov = inv(obj.Q);  % process noise covariance (from your cost formulation)
-            R_cov = inv(obj.R);  % measurement noise covariance
-            
-            % Initialize propagation with the arrival cost (prior) at time k-N+1.
-            x_prop = obj.P(1:obj.nStates,1);  % Prior state estimate.
-            P_prop = obj.P0;                  % Prior covariance.
-            
-            % Loop over the horizon steps (assume horizon length = N_MHE)
-            for i = 1:obj.N_MHE
-                % --- Prediction Step ---
-                % Extract the control input at step i from the stored block.
-                % We assume controls are stored in rows (nStates+nMeasurements+1:end) in column:
-                colU = 1 + (obj.N_MHE+1) + i;
-                u_i = obj.P(obj.nStates+obj.nMeasurements+1 : obj.nStates+obj.nMeasurements+obj.nControls, colU);
+            for i = 1:obj.N
                 
-                % Predict state and covariance using the linear model.
+                ctrl_col = 1 + (obj.N+1) + i;
+                u_i = obj.P(obj.nStates+obj.nMeasurements+1 : obj.nStates+obj.nMeasurements+obj.nControls, ctrl_col);
+                
+                % Prediction step
                 x_pred = obj.A * x_prop + obj.B * u_i;
-                P_pred = obj.A * P_prop * obj.A' + Q_cov;
+                P_pred = obj.A * P_prop * obj.A' + inv(obj.Q);
                 
-                % --- Measurement Update ---
-                % Extract the measurement for next time step (i+2, since column 1 is for the arrival state and column 2 is the measurement corresponding to the arrival state)
-                colY = 1+i+1 ;
-                y_i = obj.P(obj.nStates+1 : obj.nStates+obj.nMeasurements, colY);
+                % Update step
+                meas_col = 1+i+1 ;
+                y_i = obj.P(obj.nStates+1 : obj.nStates+obj.nMeasurements, meas_col);
                 
-                % Compute innovation: the difference between the stored measurement and prediction.
                 innovation = y_i - obj.C * x_pred;
+                S = obj.C * P_pred * obj.C' + inv(obj.R);
+                W = P_pred * obj.C' / S;
                 
-                % Compute the innovation covariance.
-                S = obj.C * P_pred * obj.C' + R_cov;
+                x_upd = x_pred + W * innovation;
+                P_upd = (eye(obj.nStates) - W * obj.C) * P_pred * (eye(obj.nStates) - W * obj.C)' + W * inv(obj.R) * W';
                 
-                % Compute the Kalman gain.
-                K = P_pred * obj.C' / S;
-                
-                % Update the state and covariance.
-                x_upd = x_pred + K * innovation;
-                % For covariance, using the Joseph form for improved numerical consistency.
-                I = eye(obj.nStates);
-                P_upd = (I - K * obj.C) * P_pred * (I - K * obj.C)' + K * R_cov * K';
-                
-                % Set these as the new prior for the next horizon step.
                 x_prop = x_upd;
                 P_prop = P_upd;
             end
             
-            % After the loop, x_prop and P_prop represent the predicted state and covariance at time k.
-            % The final innovation and its covariance (from the last measurement update) are:
-            % innovation (from the final loop iteration) and S.
-            % Compute the NIS:
+            % After this loop, x_prop and P_prop represent the predicted state and covariance at time k.
             obj.currentInnovation = innovation;
             obj.currentNIS = innovation' / S * innovation;
-            obj.currentP =P_prop;
+            obj.currentP = P_prop;
             
         end
-
-        
     end
-
 end

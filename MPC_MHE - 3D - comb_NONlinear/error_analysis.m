@@ -8,9 +8,10 @@ dt = 0.003;          % Range of dt (can be vector later)
 [nDt, nN] = size(NGrid);
 nSim = 2;            % Number of Monte Carlo simulations
 
+NT = 500;
 RMSE = zeros(nDt, nN, nSim);
-sims = zeros(10,500,numel(NGrid),nSim);
-ests = zeros(10,500,numel(NGrid),nSim);
+sims = zeros(10,NT,numel(NGrid),nSim);
+ests = zeros(10,NT,numel(NGrid),nSim);
 for k = 1:nSim
     for i = 1:numel(NGrid)
         [row, col] = ind2sub(size(NGrid), i);
@@ -21,7 +22,7 @@ for k = 1:nSim
         disp("Running simulation with N = " + num2str(currentN) + " and dt = " + num2str(currentDt))
 
         tic
-        [sim, est] = runSystem(currentN, currentDt);
+        [sim, est] = runSystem(currentN, currentDt,NT);
         sims(:,:,i,k) = sim;
         ests(:,:,i,k) = est;
 
@@ -77,7 +78,7 @@ savefig('data/RMSE_vs_N.fig')
 
 %%
 
-function [sim,est]=runSystem(N,dt)
+function [sim,est]=runSystem(N,dt,NT)
 
     % Define system parameters
     params = parameters;
@@ -105,7 +106,6 @@ function [sim,est]=runSystem(N,dt)
     % Tuning
     xRef = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0];
     X0=[0;0;zeq;0;0;0;0;0;0;0;];
-    NT=500;
     
     N_MHE=N;
     N_MPC=20;

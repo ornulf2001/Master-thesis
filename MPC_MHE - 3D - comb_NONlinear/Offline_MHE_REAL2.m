@@ -1,6 +1,7 @@
 %clc,clear
 rng(1)
 addpath(genpath('3D model reduced order_fixed'))
+load("data_with_control 1.mat")
 
 %Dynamics
 params = parameters1();
@@ -13,11 +14,37 @@ xlp=xeq;
 ueq = [0,0,0,0]';
 ulp=ueq;
 %[Ac, Bc, C] = linearizeModel(@f, @h, xeq, ueq, params);
-load("ABC_simple_model_reduced.mat");Ac=A; Bc=B;
+
+
+load('ABC_high_fidelity_model.mat');
+Ac=A;Bc=B;
+%Tuning
+%X0=[0.003;0.003;zeq+0.002;0;0;0;0;0;0;0;];
+%X0=[0;0;0;0;0;0;0;0;0;0;];
 X0=xlp;
-%% Load data
-load("data_dMag2.mat")
-I = 100:1400;
+
+alpha=1;
+N_MHE=15;
+dtvec=diff(data.t);
+dt=dtvec(1);%dt=0.005;
+
+
+%MHE tuning
+noise_std=0.1*1e-3; %mT
+%R_MHE=1e-5*inv(noise_std^2*eye(size(C,1)));  %Measurement noise weight = inv(measurement noise cov)  
+
+Q_MHE=1e8*diag([1e1,1e1,1e1,1e1,1e1,1e1,1e1,1e1,1e1,1e1]);                                   
+M_MHE = 1e2*diag([5,5,5,0.005,005,0.002,0.002,0.002,0.0001,0.0001]); %Arrival cost weight initial guess (updates KF-style in loop)
+P0 = inv(M_MHE); % Arrival cost cov initial guess.
+weightScaling =1;
+
+
+%%
+
+%Y_noisy=load("Y_noisy_sim.mat").yNext_f;
+%U_list =load("U_list_sim.mat").U_sim;
+I = 200:1400;
+
 U_list = [data.u.Ix_plus(I), data.u.Iy_plus(I), data.u.Ix_minus(I), data.u.Iy_minus(I)]';
 
 Y_noisy = 1e-3*[
@@ -27,6 +54,9 @@ Y_noisy = 1e-3*[
 ]';
 yeq=mean(Y_noisy(:,end-50:end),2);
 
+
+R_MHE=inv(cov(Y_noisy(:,1000:end)'));
+yeq_real=mean(Y_noisy(:,1000:1050),2);
 t=data.t(I);
 t=t-t(1);
 dtvec=diff(data.t);
@@ -45,39 +75,44 @@ R_MHE=inv(cov(Y_noisy(:,400:end)'));
 
 %% Run
 MHE_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
-mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,weightScaling,X0,xlp,P0,dt,MHE_options);
+mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,weightScaling,X0,xlp-xlp,P0,dt,MHE_options);
 NT=ceil(size(Y_noisy,2));
 
-xhat=X0;
+
+xhat=X0-xlp;
+%yeq=h(xlp,ulp,params);
+yeq=Y_noisy(:,end);
+
 P_current=P0;
-state_est=zeros(size(Ac,1),NT-1);
-state_est(:,1)=xhat;
-xsol2=zeros(size(Ac,1),NT-1);
+KF_est=zeros(size(Ac,1),NT-1);
+KF_est(:,1)=xhat;
+MHE_est=zeros(size(Ac,1),NT-1);
 vsol=zeros(mhe.nMeasurements,NT-1);
 wsol=zeros(size(Ac,1),NT-1);
-xsol2(:,1)=X0-xlp;
+MHE_est(:,1)=X0-xlp;
 newY_f=Y_noisy(:,1);
 
 
-R_KF=inv(R_MHE);
-Q_KF=inv(Q_MHE);
+LR=chol(R_MHE,"lower");R=LR'\(LR\eye(size(C,1)));
+LQ=chol(Q_MHE,"lower");Q=LQ'\(LQ\eye(size(Ac,1)));
+
+R_KF=cov(Y_noisy(:,1000:end)');
+Q_KF = 1e-8*eye(size(Ac));
 
 A = expm(Ac * dt);
 B = (A - eye(size(Ac))) * (Ac \ Bc);
 for k=1:NT-1
     k
-   
+
+
     newY=Y_noisy(:,k+1);
     newY_f=alpha*newY + (1-alpha)*newY_f; %EMA prefilter before MHE
     newY=newY_f; %For MHE input
     newU=U_list(:,k);
 
- 
 
-    
-
-    mhe=mhe.runMHE(newY-yeq,newU-ueq);
-    xsol2(:,k+1)=mhe.xCurrent;
+    mhe=mhe.runMHE(newY-yeq_real,newU-ueq);
+    MHE_est(:,k+1)=mhe.xCurrent;
     vsol(:,k+1)=mhe.vCurrent;
     wsol(:,k)=mhe.wCurrent;
     
@@ -88,24 +123,22 @@ for k=1:NT-1
     ypred = C*xhat_pred;
     
     % Innovation
-    y_unbiased = Y_noisy(:,k+1) - yeq;
+    y_unbiased = Y_noisy(:,k+1) - yeq_real;
     innovation = y_unbiased - ypred;
     S = C * P_pred * C' + R_KF; 
-    K = P_pred * C' / S;    
-    xhat = xhat_pred + K * innovation;
-    P_current = (eye(size(P_pred)) - K * C) * P_pred * (eye(size(P_pred)) - K * C)' + K*R_KF*K';
-    state_est(:, k+1) = xhat;
-   
-
+    W = P_pred * C' / S;    
+    xhat = xhat_pred + W * innovation;
+    P_current = (eye(size(P_pred)) - W * C) * P_pred * (eye(size(P_pred)) - W * C)' + W*R_KF*W';
+    KF_est(:, k+1) = xhat;
 
 end
 
-est_meas =   yeq + C*state_est ; % KF
-est_meas2 =  C*(xsol2)+yeq; % MHE
+est_meas =   yeq_real + C*KF_est ; % KF
+est_meas2 =  C*(MHE_est)+yeq_real; % MHE
 
 %%
-xsol2=xsol2+xlp;
-state_est=state_est+xlp;
+MHE_est=MHE_est+xlp;
+KF_est=KF_est+xlp;
 %%
 figure(1)
 clf
@@ -124,27 +157,27 @@ title("MHE")
 ylim([1.25*min(Y_noisy(:)), 1.25*max(Y_noisy(:))])
 
 figure(3);clf
-plot(t,xsol2(1:3,:));hold on
+plot(t,MHE_est(1:3,:));hold on
 title("MHE estimates position")
 yline(zeq,"r--")
 yline(0,"k--")
 legend(["x","y","z","zeq"])
 
 figure(4);clf
-plot(t,xsol2(6:8,:));hold on
+plot(t,MHE_est(6:8,:));hold on
 title("MHE estimates velocity")
 yline(0,"k--")
 legend(["xdot","ydot","zdot"])
 
 figure(5);clf
-plot(t,state_est(1:3,:));hold on
+plot(t,KF_est(1:3,:));hold on
 title("KF estimates position")
 yline(zeq,"r--")
 yline(0,"k--")
 legend(["x","y","z","zeq"])
 
 figure(6);clf
-plot(t,state_est(6:8,:));hold on
+plot(t,KF_est(6:8,:));hold on
 title("KF estimates velocity")
 yline(0,"k--")
 legend(["xdot","ydot","zdot"])
@@ -256,33 +289,33 @@ legend(["x","y","z","zeq"])
 % 
 % 
 % %%
-% xsol2=xsol2+xlp;
+% MHE_est=MHE_est+xlp;
 % figure(5)
 % clf
 % subplot(3,1,1)
-% plot(xsol2(1,1:NT-1));
+% plot(MHE_est(1,1:NT-1));
 % title("x")
 % 
 % subplot(3,1,2)
-% plot(xsol2(2,1:NT-1));
+% plot(MHE_est(2,1:NT-1));
 % title("y")
 % 
 % subplot(3,1,3)
-% plot(xsol2(3,1:NT-1));
+% plot(MHE_est(3,1:NT-1));
 % title("z")
 % 
 % figure(7)
 % clf
 % subplot(3,1,1)
-% plot(xsol2(6,1:NT-1));
+% plot(MHE_est(6,1:NT-1));
 % title("xdot")
 % 
 % subplot(3,1,2)
-% plot(xsol2(7,1:NT-1));
+% plot(MHE_est(7,1:NT-1));
 % title("ydot")
 % 
 % subplot(3,1,3)
-% plot(xsol2(8,1:NT-1));
+% plot(MHE_est(8,1:NT-1));
 % title("zdot")
 % %%
 % 
@@ -292,7 +325,7 @@ legend(["x","y","z","zeq"])
 % % C2=C(1:9,6:10);
 % % Cflip=[C2,C1];
 % % 
-% % est_meas_flip=Cflip*(xsol2);
+% % est_meas_flip=Cflip*(MHE_est);
 % % 
 % % plot(Y_noisy(8,1:NT-1));hold on
 % % plot(est_meas_flip(3,1:NT-1));
@@ -315,7 +348,7 @@ legend(["x","y","z","zeq"])
 % 
 % %%
 % 
-% est_meas2=C*(state_est+xlp);
+% est_meas2=C*(KF_est+xlp);
 % 
 % figure(9)
 % clf
@@ -377,26 +410,26 @@ legend(["x","y","z","zeq"])
 %%
 
 % figure(101);clf
-% plot(state_est(3,:)+xlp(3));hold on
-% plot(xsol2(3,:)+xlp(3))
+% plot(KF_est(3,:)+xlp(3));hold on
+% plot(MHE_est(3,:)+xlp(3))
 % title("z")
 % legend(["KF","MHE"])
 % 
 % figure(102);clf
-% plot(state_est(8,:)+xlp(8));hold on
-% plot(xsol2(8,:)+xlp(8))
+% plot(KF_est(8,:)+xlp(8));hold on
+% plot(MHE_est(8,:)+xlp(8))
 % title("zdot")
 % legend(["KF","MHE"])
 % 
 % figure(103);clf
-% plot(state_est(2,:)+xlp(2));hold on
-% plot(xsol2(2,:)+xlp(2))
+% plot(KF_est(2,:)+xlp(2));hold on
+% plot(MHE_est(2,:)+xlp(2))
 % title("x")
 % legend(["KF","MHE"])
 % 
 % figure(104);clf
-% plot(state_est(7,:)+xlp(7));hold on
-% plot(xsol2(7,:)+xlp(7))
+% plot(KF_est(7,:)+xlp(7));hold on
+% plot(MHE_est(7,:)+xlp(7))
 % title("xdot")
 % legend(["KF","MHE"])
 

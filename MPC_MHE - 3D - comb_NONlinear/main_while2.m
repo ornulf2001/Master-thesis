@@ -48,7 +48,7 @@ NT=t/dt;
 
 %MHE tuning
 alpha=0.9;
-noise_std=0.1*1e-3; %mT
+noise_std=0.1*1e-3; %0.1 mT
 R_MHE=inv(noise_std^2*eye(nMeasurements));  %Measurement noise weight = inv(measurement noise cov)      
 Q_MHE=10e3*diag([100,100,10,10,100,100,100,100,100,10]); 
     %Start out with low Q to trust measurements during start up, 
@@ -78,16 +78,17 @@ run("mpc_bounds.m") %currently inf all over
 %% Run
 
 %MHE_options = qpOASES_options();
-MHE_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
+MHE_options = optimset('Display','off', 'Diagnostics','off', 'Algorithm', 'active-set');
 mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,weightScaling,X0-xlp,xlp,P0,dt,MHE_options);
 
-MPC_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
+MPC_options = optimset('Display','off', 'Diagnostics','off', 'Algorithm', 'active-set');
 mpc = MPCclass(N_MPC, Ac, Bc, X0, dt, [], [], Q_MPC, R_MPC, nStates, nControls,MPC_options, xRef, [], []);
 
 %Init
 X_sim = zeros(nStates, NT);
 U_sim = zeros(nControls, NT-1);
 vsol = zeros(nMeasurements,NT);
+wsol = zeros(nMeasurements,NT-1);
 MHE_est = zeros(nStates, NT);
 MHE_est(:,1)=mhe.x0; xEst = mhe.x0;
 yNext=zeros(nMeasurements,NT);  
@@ -154,9 +155,9 @@ while RunningFlag == true && iterCounter < (NT)
     disp(string(k) + ", Running with advanced control: " + string(useAdvancedControl))
 
 
-    if iterCounter==mhe.N_MHE+2
+    if iterCounter==mhe.N+2
         mhe.Q = 5e3*mhe.Q;
-        mhe.G(mhe.nStates*(mhe.N_MHE+1)+1:mhe.nStates*(mhe.N_MHE+1)+mhe.nStates*mhe.N_MHE ,mhe.nStates*(mhe.N_MHE+1)+1:mhe.nStates*(mhe.N_MHE+1)+mhe.nStates*mhe.N_MHE ) = kron(mhe.weightScaling*mhe.Q,eye(mhe.N_MHE));
+        mhe.G(mhe.nStates*(mhe.N+1)+1:mhe.nStates*(mhe.N+1)+mhe.nStates*mhe.N ,mhe.nStates*(mhe.N+1)+1:mhe.nStates*(mhe.N+1)+mhe.nStates*mhe.N ) = kron(mhe.weightScaling*mhe.Q,eye(mhe.N));
         %Here we increase Q after N_MHE+1 iterations when the MHE has calibrated. This seems to improve performance?
     end
 
@@ -185,6 +186,8 @@ while RunningFlag == true && iterCounter < (NT)
     xEst=mhe.xCurrent; %xk^
     MHE_est(:,k+1)=xEst;
     vsol(:,k+1)=mhe.vCurrent;
+    wsol(:,k+1)=mhe.vCurrent;
+
 
     NIS_current=mhe.currentNIS;
     NIS_traj(k) = NIS_current;
@@ -346,7 +349,7 @@ allPassed=true;
 for innov_var=1:nMeasurements
     [hj,pj]=lbqtest(Innovations_traj(innov_var,60:end));
     if hj~=0
-        disp(['Innovations for state ' num2str(innov_var) ' did not pass the Ljung-Box test. P = ' num2str(pj)])
+        disp(['Innovations for measurement ' num2str(innov_var) ' did not pass the Ljung-Box test. P = ' num2str(pj)])
         allPassed=false;
         figure(8+innov_var)
         clf
@@ -356,7 +359,7 @@ for innov_var=1:nMeasurements
     end
 end
 if allPassed==true
-    disp('All states passed the Ljung-Box test! :-)')
+    disp('All innovations passed the Ljung-Box test! :-)')
 end
 
 
