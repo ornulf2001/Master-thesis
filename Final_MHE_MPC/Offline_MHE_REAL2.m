@@ -1,0 +1,449 @@
+%clc,clear
+rng(1)
+addpath(genpath('3D model reduced order_fixed'))
+load("data_with_control 1.mat")
+
+%Dynamics
+params = parameters1();
+
+index = @(A, i) A(i);
+fz = @(z) index(f([0,0,z,zeros(1,7)]',[0,0,0,0]',params),8);  % state is now 10x1 
+zeq =  fzero(fz,0.03);
+xeq = [0,0,zeq,zeros(1,7)]';
+xlp=xeq;
+ueq = [0,0,0,0]';
+ulp=ueq;
+%[Ac, Bc, C] = linearizeModel(@f, @h, xeq, ueq, params);
+
+
+load('ABC_high_fidelity_model.mat');
+Ac=A;Bc=B;
+%Tuning
+%X0=[0.003;0.003;zeq+0.002;0;0;0;0;0;0;0;];
+%X0=[0;0;0;0;0;0;0;0;0;0;];
+X0=xlp;
+
+alpha=1;
+N_MHE=15;
+dtvec=diff(data.t);
+dt=dtvec(1);%dt=0.005;
+
+
+%MHE tuning
+noise_std=0.1*1e-3; %mT
+%R_MHE=1e-5*inv(noise_std^2*eye(size(C,1)));  %Measurement noise weight = inv(measurement noise cov)  
+
+Q_MHE=1e8*diag([1e1,1e1,1e1,1e1,1e1,1e1,1e1,1e1,1e1,1e1]);                                   
+M_MHE = 1e2*diag([5,5,5,0.005,005,0.002,0.002,0.002,0.0001,0.0001]); %Arrival cost weight initial guess (updates KF-style in loop)
+P0 = inv(M_MHE); % Arrival cost cov initial guess.
+weightScaling =1;
+
+
+%%
+
+%Y_noisy=load("Y_noisy_sim.mat").yNext_f;
+%U_list =load("U_list_sim.mat").U_sim;
+I = 200:1400;
+
+U_list = [data.u.Ix_plus(I), data.u.Iy_plus(I), data.u.Ix_minus(I), data.u.Iy_minus(I)]';
+
+Y_noisy = 1e-3*[
+    data.sensorData{1}.bx(I), data.sensorData{1}.by(I), data.sensorData{1}.bz(I),...
+    data.sensorData{2}.bx(I), data.sensorData{2}.by(I), data.sensorData{2}.bz(I),...
+    data.sensorData{3}.bx(I), data.sensorData{3}.by(I), data.sensorData{3}.bz(I)
+]';
+yeq=mean(Y_noisy(:,end-50:end),2);
+
+
+R_MHE=inv(cov(Y_noisy(:,1000:end)'));
+yeq_real=mean(Y_noisy(:,1000:1050),2);
+t=data.t(I);
+t=t-t(1);
+dtvec=diff(data.t);
+dt=dtvec(1);
+
+%% MHE tuning
+alpha=1;
+N_MHE=10;
+
+%Q_MHE=1e6*diag([1e6,1e5,1e5,1e5,1e5,0.5e-3,0.5e-3,0.5e-3,0.5e-3,0.5e-3]);  
+Q_MHE=1e6*diag([1e1,1e1,1e1,1e1,1e1,1e5,1e5,1e5,1e5,1e5]);  
+M_MHE = 1e2*diag([5,5,5,0.005,005,0.002,0.002,0.002,0.0001,0.0001]); %Arrival cost weight initial guess (updates KF-style in loop)
+P0 = inv(M_MHE); % Arrival cost cov initial guess.
+weightScaling =1e-4;
+R_MHE=inv(cov(Y_noisy(:,400:end)'));
+
+%% Run
+MHE_options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'active-set');
+mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,Q_MHE,R_MHE,M_MHE,weightScaling,X0,xlp-xlp,P0,dt,MHE_options);
+NT=ceil(size(Y_noisy,2));
+
+
+xhat=X0-xlp;
+%yeq=h(xlp,ulp,params);
+yeq=Y_noisy(:,end);
+
+P_current=P0;
+KF_est=zeros(size(Ac,1),NT-1);
+KF_est(:,1)=xhat;
+MHE_est=zeros(size(Ac,1),NT-1);
+vsol=zeros(mhe.nMeasurements,NT-1);
+wsol=zeros(size(Ac,1),NT-1);
+MHE_est(:,1)=X0-xlp;
+newY_f=Y_noisy(:,1);
+
+
+LR=chol(R_MHE,"lower");R=LR'\(LR\eye(size(C,1)));
+LQ=chol(Q_MHE,"lower");Q=LQ'\(LQ\eye(size(Ac,1)));
+
+R_KF=cov(Y_noisy(:,1000:end)');
+Q_KF = 1e-8*eye(size(Ac));
+
+A = expm(Ac * dt);
+B = (A - eye(size(Ac))) * (Ac \ Bc);
+for k=1:NT-1
+    k
+
+
+    newY=Y_noisy(:,k+1);
+    newY_f=alpha*newY + (1-alpha)*newY_f; %EMA prefilter before MHE
+    newY=newY_f; %For MHE input
+    newU=U_list(:,k);
+
+
+    mhe=mhe.runMHE(newY-yeq_real,newU-ueq);
+    MHE_est(:,k+1)=mhe.xCurrent;
+    vsol(:,k+1)=mhe.vCurrent;
+    wsol(:,k)=mhe.wCurrent;
+    
+
+    xhat_pred = A * xhat + B * (newU-ueq);
+    P_pred = A * P_current * A' + Q_KF;
+
+    ypred = C*xhat_pred;
+    
+    % Innovation
+    y_unbiased = Y_noisy(:,k+1) - yeq_real;
+    innovation = y_unbiased - ypred;
+    S = C * P_pred * C' + R_KF; 
+    W = P_pred * C' / S;    
+    xhat = xhat_pred + W * innovation;
+    P_current = (eye(size(P_pred)) - W * C) * P_pred * (eye(size(P_pred)) - W * C)' + W*R_KF*W';
+    KF_est(:, k+1) = xhat;
+
+end
+
+est_meas =   yeq_real + C*KF_est ; % KF
+est_meas2 =  C*(MHE_est)+yeq_real; % MHE
+
+%%
+MHE_est=MHE_est+xlp;
+KF_est=KF_est+xlp;
+%%
+figure(1)
+clf
+h1 = plot(t/dt, Y_noisy(1:6,:), 'b-'); hold on
+h2 = plot(t/dt, est_meas(1:6,:), 'r--');
+legend([h1(1), h2(1)], ["meas", "est"]) % Use first line from each group for the legend
+title("KF")
+ylim([1.25*min(Y_noisy(:)), 1.25*max(Y_noisy(:))])
+
+figure(2)
+clf
+h1 = plot(t/dt, Y_noisy(1:6,:), 'b-'); hold on
+h2 = plot(t/dt, est_meas2(1:6,:), 'r--');
+legend([h1(1), h2(1)], ["meas", "est"]) % Use first line from each group for the legend
+title("MHE")
+ylim([1.25*min(Y_noisy(:)), 1.25*max(Y_noisy(:))])
+
+figure(3);clf
+plot(t,MHE_est(1:3,:));hold on
+title("MHE estimates position")
+yline(zeq,"r--")
+yline(0,"k--")
+legend(["x","y","z","zeq"])
+
+figure(4);clf
+plot(t,MHE_est(6:8,:));hold on
+title("MHE estimates velocity")
+yline(0,"k--")
+legend(["xdot","ydot","zdot"])
+
+figure(5);clf
+plot(t,KF_est(1:3,:));hold on
+title("KF estimates position")
+yline(zeq,"r--")
+yline(0,"k--")
+legend(["x","y","z","zeq"])
+
+figure(6);clf
+plot(t,KF_est(6:8,:));hold on
+title("KF estimates velocity")
+yline(0,"k--")
+legend(["xdot","ydot","zdot"])
+
+figure(7);clf
+plot(t(1:end-1),wsol(:,:))
+yline(0,"k--")
+legend(["x","y","z","ph","th","xdot","ydot","zdot","phdot","thdot"])
+title("MHE process noise w estimates")
+
+figure(8);clf
+plot(t,vsol(:,:))
+yline(0,"k--")
+legend(["x","y","z","ph","th","xdot","ydot","zdot","phdot","thdot"])
+title("MHE measurement noise v estimates")
+
+
+
+%%
+
+dyx0=1e-3* data.dMagField.dMagFieldX(I)';
+dyy0=1e-3* data.dMagField.dMagFieldY(I)';
+
+
+
+for i=1:NT
+    dxEst(:,i) = circshift(xsol2(:,i), 5);
+    dyEst(:,i) = C*dxEst(:,i);
+end
+
+x_recon = zeros(size(xsol2,1)/2,size(xsol2,2));  % Reconstructed x from dxEst
+for j=1:size(Ac,1)/2
+    x_recon(j,:)=xsol2(j,60)+cumtrapz(t, xsol2(j+5,:));
+end
+
+diffY=diff(Y_noisy(1,:))./diff(t)';
+
+figure(9);clf
+plot(dyx0,"b-"); hold on
+plot(dyEst(1,2:end),"r-"); 
+%plot(diffY,"k-")
+%legend(["dMagFieldX","dY\_X\_est"])
+legend(["dMagFieldX","filter","meas"])
+
+figure(10);clf
+plot(t,x_recon(1:3,:));hold on
+title("MHE estimates position reconstructed from dxEst")
+yline(zeq,"r--")
+yline(0,"k--")
+legend(["x","y","z","zeq"])
+
+
+
+% subplot(3,1,1)
+% plot(Y_noisy(4,1:NT-1)); hold on
+% plot(est_meas(4,1:NT-1))
+% legend(["meas","est"])
+% title("b2x")
+% 
+% subplot(3,1,2)
+% plot(Y_noisy(5,1:NT-1)); hold on
+% plot(est_meas(5,1:NT-1))
+% legend(["meas","est"])
+% title("b2y")
+% 
+% subplot(3,1,3)
+% plot(Y_noisy(6,1:NT-1)); hold on
+% plot(est_meas(6,1:NT-1))
+% legend(["meas","est"])
+% title("b2z")
+% % 
+% 
+% subplot(9,1,4)
+% plot(Y_noisy(4,1:NT-1)); hold on
+% plot(est_meas(4,1:NT-1))
+% legend(["meas","est"])
+% title("b1x")
+% 
+% subplot(9,1,5)
+% plot(Y_noisy(5,1:NT-1)); hold on
+% plot(est_meas(5,1:NT-1))
+% legend(["meas","est"])
+% title("b1y")
+% 
+% subplot(9,1,6)
+% plot(Y_noisy(6,1:NT-1)); hold on
+% plot(est_meas(6,1:NT-1))
+% legend(["meas","est"])
+% title("b1z")
+% 
+% 
+% subplot(9,1,7)
+% plot(Y_noisy(7,1:NT-1)); hold on
+% plot(est_meas(7,1:NT-1))
+% legend(["meas","est"])
+% title("b2x")
+% 
+% subplot(9,1,8)
+% plot(Y_noisy(8,1:NT-1)); hold on
+% plot(est_meas(8,1:NT-1))
+% legend(["meas","est"])
+% title("b2y")
+% 
+% subplot(9,1,9)
+% plot(Y_noisy(9,1:NT-1)); hold on
+% plot(est_meas(9,1:NT-1))
+% legend(["meas","est"])
+% title("b2z")
+% 
+% 
+% %%
+% MHE_est=MHE_est+xlp;
+% figure(5)
+% clf
+% subplot(3,1,1)
+% plot(MHE_est(1,1:NT-1));
+% title("x")
+% 
+% subplot(3,1,2)
+% plot(MHE_est(2,1:NT-1));
+% title("y")
+% 
+% subplot(3,1,3)
+% plot(MHE_est(3,1:NT-1));
+% title("z")
+% 
+% figure(7)
+% clf
+% subplot(3,1,1)
+% plot(MHE_est(6,1:NT-1));
+% title("xdot")
+% 
+% subplot(3,1,2)
+% plot(MHE_est(7,1:NT-1));
+% title("ydot")
+% 
+% subplot(3,1,3)
+% plot(MHE_est(8,1:NT-1));
+% title("zdot")
+% %%
+% 
+% % figure(6)
+% % clf
+% % C1=C(1:9,1:5);
+% % C2=C(1:9,6:10);
+% % Cflip=[C2,C1];
+% % 
+% % est_meas_flip=Cflip*(MHE_est);
+% % 
+% % plot(Y_noisy(8,1:NT-1));hold on
+% % plot(est_meas_flip(3,1:NT-1));
+% %(1:9,1:5)=C()
+% 
+% %%
+% % figure(6)
+% % clf
+% % plot(Y_noisy(8,:))
+% figure(8);
+% clf
+% plot(NIS_traj, 'LineWidth', 1.5); hold on;
+% yline(lowerBound_NIS, '--r', 'LineWidth', 1.5);
+% yline(upperBound_NIS, '--r', 'LineWidth', 1.5);
+% xlabel('Time');
+% ylabel('NIS');
+% title(['NIS trajectory with 95% Chi-square bounds (DoF = ' num2str(mhe.nMeasurements) ')']);
+% grid on;
+% legend('NIS', 'Lower 95% bound', 'Upper 95% bound');
+% 
+% %%
+% 
+% est_meas2=C*(KF_est+xlp);
+% 
+% figure(9)
+% clf
+% subplot(3,1,1)
+% plot(Y_noisy(4,1:NT-1)); hold on
+% plot(est_meas2(4,1:NT-1))
+% legend(["meas","est"])
+% title("b0x")
+% 
+% subplot(3,1,2)
+% plot(Y_noisy(5,1:NT-1)); hold on
+% plot(est_meas2(5,1:NT-1))
+% legend(["meas","est"])
+% title("b0y")
+% 
+% subplot(3,1,3)
+% plot(Y_noisy(6,1:NT-1)); hold on
+% plot(est_meas2(6,1:NT-1))
+% legend(["meas","est"])
+% title("b0z")
+% 
+% 
+% subplot(9,1,4)
+% plot(Y_noisy(4,1:NT-1)); hold on
+% plot(est_meas2(4,1:NT-1))
+% legend(["meas","est"])
+% title("b1x")
+% 
+% subplot(9,1,5)
+% plot(Y_noisy(5,1:NT-1)); hold on
+% plot(est_meas2(5,1:NT-1))
+% legend(["meas","est"])
+% title("b1y")
+% 
+% subplot(9,1,6)
+% plot(Y_noisy(6,1:NT-1)); hold on
+% plot(est_meas2(6,1:NT-1))
+% legend(["meas","est"])
+% title("b1z")
+% 
+% 
+% subplot(9,1,7)
+% plot(Y_noisy(7,1:NT-1)); hold on
+% plot(est_meas2(7,1:NT-1))
+% legend(["meas","est"])
+% title("b2x")
+% 
+% subplot(9,1,8)
+% plot(Y_noisy(8,1:NT-1)); hold on
+% plot(est_meas2(8,1:NT-1))
+% legend(["meas","est"])
+% title("b2y")
+% 
+% subplot(9,1,9)
+% plot(Y_noisy(9,1:NT-1)); hold on
+% plot(est_meas2(9,1:NT-1))
+% legend(["meas","est"])
+% title("b2z")
+%%
+
+% figure(101);clf
+% plot(KF_est(3,:)+xlp(3));hold on
+% plot(MHE_est(3,:)+xlp(3))
+% title("z")
+% legend(["KF","MHE"])
+% 
+% figure(102);clf
+% plot(KF_est(8,:)+xlp(8));hold on
+% plot(MHE_est(8,:)+xlp(8))
+% title("zdot")
+% legend(["KF","MHE"])
+% 
+% figure(103);clf
+% plot(KF_est(2,:)+xlp(2));hold on
+% plot(MHE_est(2,:)+xlp(2))
+% title("x")
+% legend(["KF","MHE"])
+% 
+% figure(104);clf
+% plot(KF_est(7,:)+xlp(7));hold on
+% plot(MHE_est(7,:)+xlp(7))
+% title("xdot")
+% legend(["KF","MHE"])
+
+
+
+
+
+
+%%
+function data = getParams()
+    persistent params
+
+    if isempty(params)
+        parameters2;
+    end
+    data = params;
+end
