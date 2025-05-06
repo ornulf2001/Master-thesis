@@ -118,7 +118,7 @@ classdef MPCclass
             AeqU = obj.B;
             beqU = (eye(obj.nStates) - obj.A) * obj.xRef;
 
-            options = optimset('Display','on', 'Diagnostics','on', 'LargeScale','off', 'Algorithm', 'interior-point-convex');
+            options = optimset('Display','off', 'Diagnostics','off', 'LargeScale','off', 'Algorithm', 'interior-point-convex');
             
             uRef = quadprog(GU, fU, [], [], AeqU, beqU, obj.lbuRef, obj.ubuRef, [], options);
             

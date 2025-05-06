@@ -34,8 +34,8 @@ t = 2;
 
 N_MHE = 15;
 N_MPC = 10;
-dt = 0.004;
-NT = t/dt;
+dt = 0.003;
+NT = 500;
 
 %MHE tuning
 alpha = 0.9;
@@ -173,32 +173,33 @@ while RunningFlag == true && iterCounter < (NT)
     %X_sim(:, k+1) = X(end, :)'; 
     X_sim(:, k+1) = RK4Step(@f, X_sim(:,k), U, dt, params);
     U_sim(:, k) = U; 
-    newU = U_sim(:, k); 
+    newU = U_sim(:, k); %For MHE input
 
     noise = noise_std * randn([nMeasurements, 1]);
     yNext(:, k+1) = C * X_sim(:, k+1) - C * xlp + noise; 
-    yNext_f(:, k+1) = alpha * yNext(:, k+1) + (1-alpha) * yNext_f(:, k); %EMA prefilter before MHE
-    newY=yNext_f(:,k+1); %For MHE input
-    mhe=mhe.runMHE(newY,newU); %Estimate xk with MHE
-    xEst=mhe.xCurrent; %xk^
-    MHE_est(:,k+1)=xEst;
-    vsol(:,k+1)=mhe.vCurrent;
-    wsol(:,k+1)=mhe.vCurrent;
+    yNext_f(:, k+1) = alpha * yNext(:, k+1) + (1-alpha) * yNext_f(:, k); %EMA
+    newY = yNext_f(:, k+1); %For MHE input
+    mhe = mhe.runMHE(newY, newU); %Run MHE with newY and newU
+    xEst = mhe.xCurrent; % Extract xhat
+    MHE_est(:, k+1) = xEst;
+    vsol(:, k+1) = mhe.vCurrent;
+    wsol(:, k+1) = mhe.vCurrent;
 
 
-    NIS_current=mhe.currentNIS;
+    NIS_current = mhe.currentNIS;
     NIS_traj(k) = NIS_current;
-    Innovations_traj(:,k)=mhe.currentInnovation;
-    error=xEst - (X_sim(:,k+1)-xlp);
+    Innovations_traj(:,k) = mhe.currentInnovation;
+    error = xEst - (X_sim(:, k+1) - xlp);
     NEES_traj(k) = error' / mhe.currentP * error;
 
     %profile viewer
     elapsed = toc(t_start)
-    %RunningFlag=false;
 end
+
 profile off
-save("Y_noisy_sim","yNext_f")
-save("U_list_sim","U_sim")
+save("data/Y_noisy_sim","yNext_f")
+save("data/U_list_sim","U_sim")
+
 %% Plot
 
 figure(1)
@@ -335,12 +336,6 @@ legend('NEES', 'Lower 95% bound', 'Upper 95% bound');
 
 
 %% Innovations whiteness test
-%innov_var=9;
-%[h,p]=lbqtest(Innovations_traj(innov_var,:));
-%figure(7)
-%clf
-%plot(Innovations_traj(innov_var,:))
-%title(['Ljung-Box test: h = '  num2str(h) ', p = ' num2str(p)])
 
 allPassed=true;
 for innov_var=1:nMeasurements
@@ -376,11 +371,3 @@ function gamma = gamma_f(k,fade_period) %Not in use, old fading factor [0,1] to 
     gamma = (k-fade_period(1))/(fade_period(end)-fade_period(1));
 end
 
-function x_next = RK4Step(f,x,U,dt,params)
-    k1 = f(x,U,params);
-    k2 = f(x+0.5*dt*k1,U,params);
-    k3 = f(x+0.5*dt*k2,U,params);
-    k4 = f(x + dt*k3, U, params);
-
-    x_next = x+(dt/6)*(k1+2*k2+2*k3+k4);
-end

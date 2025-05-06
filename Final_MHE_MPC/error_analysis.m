@@ -1,7 +1,7 @@
-clc; clear
+clc, clear
 addpath(genpath('3D model reduced order'))
 
-N = 2:2:4;           % Range of N
+N = 10:2:10;           % Range of N
 dt = 0.003;          % Range of dt (can be vector later)
 
 [NGrid, dtGrid] = meshgrid(N, dt);
@@ -10,8 +10,8 @@ nSim = 2;            % Number of Monte Carlo simulations
 
 NT = 500;
 RMSE = zeros(nDt, nN, nSim);
-sims = zeros(10,NT,numel(NGrid),nSim);
-ests = zeros(10,NT,numel(NGrid),nSim);
+sims = zeros(10, NT, numel(NGrid),nSim);
+ests = zeros(10, NT, numel(NGrid),nSim);
 for k = 1:nSim
     for i = 1:numel(NGrid)
         [row, col] = ind2sub(size(NGrid), i);
@@ -19,10 +19,11 @@ for k = 1:nSim
         currentDt = dtGrid(row, col);
 
         disp("Simulation series " + k)
-        disp("Running simulation with N = " + num2str(currentN) + " and dt = " + num2str(currentDt))
+        disp("Running simulation with N = " + ...
+                num2str(currentN) + " and dt = " + num2str(currentDt))
 
         tic
-        [sim, est] = runSystem(currentN, currentDt,NT);
+        [sim, est] = runSystem(currentN, currentDt, NT);
         sims(:,:,i,k) = sim;
         ests(:,:,i,k) = est;
 
@@ -37,21 +38,21 @@ disp("Finished all simulations")
 % Average across Monte Carlo runs
 RMSE_mean = mean(RMSE, 3);
 %%
-folder="data_"+datestr(datetime("now"),"yyyymmdd_HHMMSS");
+folder="data/data_" + datestr(datetime("now"), "yyyymmdd_HHMMSS");
 if ~exist(folder, 'dir')
     mkdir(folder);
 end
-save(folder+"/RMSEtotal","RMSE")
-save(folder+"/sims","sims")
-save(folder+"/ests","ests")
-save(folder+"/RMSEmean","RMSE_mean")
+save(folder + "/RMSEtotal","RMSE")
+save(folder + "/sims","sims")
+save(folder + "/ests","ests")
+save(folder + "/RMSEmean","RMSE_mean")
 
 %% plot
 figure(1)
 clf
 
 try %Generally fails of length(dt)=1 -> RMSE is vector not grid
-    surf(NGrid,dtGrid,RMSE_mean); grid on
+    surf(NGrid, dtGrid, RMSE_mean); grid on
     colorbar
     xlabel('Horizon Length N');
     ylabel('Time Step dt');
@@ -59,7 +60,7 @@ try %Generally fails of length(dt)=1 -> RMSE is vector not grid
     title('Surface plot of RMSE vs. N and dt');
 
 catch
-    plot(N,RMSE_mean,"-r"); grid on; 
+    plot(N,RMSE_mean, "-r"); grid on; 
     xlabel('Horizon Length N');
     ylabel('RMSE');
     title('Plot of RMSE vs. N');
@@ -85,146 +86,195 @@ function [sim,est]=runSystem(N,dt,NT)
     
     % Find equilibrium point
     index = @(A,i) A(i);
-    fz = @(z) index(f([0,0,z,zeros(1,7)]',[0,0,0,0]',params),8);  % state is now 10x1
-    
+    fz = @(z) index(f([0,0,z,zeros(1,7)]', [0,0,0,0]', params), 8);  
     zeq =  fzero(fz,0.1);
     
-    xeq = [0,0,zeq,zeros(1,7)]';
+    xeq = [0, 0, zeq, zeros(1,7)]';
     ueq = [0,0,0,0]';
     
     % Linearize model
-    xlp = xeq;   % 10x1 equilibrium state
+    xlp = xeq;   
     ulp = ueq;
     
-    [Ac,Bc,C] = linearizeModel(@f,@h,xlp,ulp,params);
+    % States: [ x y z phi theta xdot ydot zdot phidot thetadot ]
+    [Ac, Bc, C] = linearizeModel(@f, @h, xlp, ulp, params);
     
-    
-    nStates=size(Ac,1);
-    nControls = size(Bc,2);
-    nMeasurements = size(C,1);
+    nStates = size(Ac, 1);
+    nControls = size(Bc, 2);
+    nMeasurements = size(C, 1);
     
     % Tuning
     xRef = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0];
-    X0=[0;0;zeq;0;0;0;0;0;0;0;];
+    X0 = [0.003; 0.003; zeq+0.002; 0; 0; 0; 0; 0; 0; 0;];
     
-    N_MHE=N;
-    N_MPC=20;
+    t = 2;
     
+    N_MHE = N;
+    N_MPC = 10;
+    %dt = dt;
+    %NT = t/dt;
     
-    % States: | x y z phi theta xdot ydot zdot phidot thetadot |
+    %MHE tuning
+    alpha = 0.9;
+    noise_std = 0.1 * 1e-3; %0.1 mT
+    R_MHE = inv(noise_std^2 * eye(nMeasurements));  
+    Q_MHE = 10e3 * diag([100, 100, 10, 10, 100, 100, 100, 100, 100, 10]); 
+        %Start out with low Q during start up, then increase Q after N_MHE+1. 
+        %See below in loop
     
-    alpha=0.7;
-    noise_std=0.1*1e-3; %mT
-    R_MHE=inv(noise_std^2*eye(nMeasurements));         
-    Q_MHE=25e4*diag([100,100,100,100,100,100,100,100,100,100]); 
+    %Arrival cost weight initial guess (updates KF-style in loop)
+    M_MHE = 1e5 * diag([5, 5, 5, 0.005, 005, 0.002, 0.002, 0.002, 0.0001, 0.0001]);
+    P0 = inv(M_MHE); % Arrival cost cov initial guess.
+    weightScaling = 1e-4; %Scaling factor for better posing of QP
     
-    M_MHE = 1e5*diag([5,5,5,0.005,005,0.002,0.002,0.002,0.0001,0.0001]);
-    P0 = inv(M_MHE);
-    
-    Q_MPC = diag([500 500 2000 10 10 1 1 10 1 1]);
-    R_MPC = diag([0.2 0.2 0.2 0.2]);
+    %MPC and LQR tuning
+    Q_MPC = diag([500, 500, 2000, 10, 10, 1, 1, 50, 1, 1]);
+    R_MPC = diag([0.2, 0.2, 0.2, 0.2]);
     
     Q_LQR = diag([ ...
        1e1,1e1,1e1,1e1,1e1, ...
        1e1,1e1,1e5,1e1,1e1
        ]);
-    R_LQR = 1e2*eye(4);
-    
+    R_LQR = 1e2 * eye(4);
     
     % Bounds
-    run("mpc_bounds.m")
+    run("mpc_bounds.m") %currently inf all over
     
     % Run
-    MHE_options = optimoptions('quadprog','Display','none', 'Algorithm','interior-point-convex');
-    mhe = MHEclass_KF_Update(N_MHE,Ac,Bc,C,1e-5*Q_MHE,1e-5*R_MHE,1e-5*M_MHE,X0,xlp,P0,dt,MHE_options);
     
-    MPC_options = optimoptions('quadprog','Display','none', 'Algorithm', 'interior-point-convex');
-    mpc = MPCclass(N_MPC, Ac, Bc, X0, dt, [], [], Q_MPC, R_MPC, nStates, nControls,MPC_options, xRef, [], []);
-
+    %MHE_options = qpOASES_options();
+    MHE_options = optimset('Display','off', 'Diagnostics','off', ...
+            'Algorithm', 'active-set');
+    mhe = MHEclass(N_MHE, Ac, Bc, C, Q_MHE, R_MHE, M_MHE, weightScaling, ...
+            X0-xlp, xlp, P0, dt, MHE_options);
+    
+    MPC_options = optimset('Display', 'off', 'Diagnostics', 'off', ...
+            'Algorithm', 'active-set');
+    mpc = MPCclass(N_MPC, Ac, Bc, X0, dt, [], [], Q_MPC, R_MPC, ...
+            nStates, nControls, MPC_options, xRef, [], []);
+    
+    %Init
     X_sim = zeros(nStates, NT);
     U_sim = zeros(nControls, NT-1);
+    vsol = zeros(nMeasurements, NT);
+    wsol = zeros(nMeasurements, NT-1);
     MHE_est = zeros(nStates, NT);
-    MHE_est(:,1)=mhe.x0; xEst = mhe.x0;
-    yNext=zeros(nMeasurements,NT);  
-    yNext(:,1)= C*(X0-xlp);
-    % yNext(:, 1) = h(X0, params);
-    yNext_f=zeros(nMeasurements,NT);
-    yNext_f(:,1)=C*(X0-xlp);
-    % yNext_f(:, 1) = h(X0, params);
-    newY=yNext(:,1);
+    MHE_est(:,1) = mhe.x0; 
+    xEst = mhe.x0;
+    yNext = zeros(nMeasurements, NT);  
+    yNext(:,1) = C * (X0-xlp);
+    yNext_f = zeros(nMeasurements, NT);
+    yNext_f(:,1) = C * (X0-xlp);
+    NIS_traj = zeros(NT-1, 1);
+    NEES_traj = zeros(NT-1, 1);
+    Innovations_traj = zeros(nMeasurements, NT-1);
+    newY = yNext(:,1);
     xNext = X0;
     X_sim(:, 1) = X0;
-    error=[];
     tspan = [0, dt];
     
     % Calculating the reference input for stabilizing in the reference point
-    uRef = mpc.computeReferenceInput();
+    uRef = mpc.computeReferenceInput(); 
     
-    %mhe=mhe.initialGuessPropegation();
-    for k=1:NT-1
-        try
-            if k==mhe.N_MHE+2
-                mhe.Q = 5e3*mhe.Q; %This relies on having enabled dynamic update of arrival cost in MHE. 
-                                   %That is, G must be updated with the new Q, which is done automatically when 
-                                   %updating M as well in arrival cost. If this is not done, we must update G here also.
+    iterCounter = 1;
+    switchCounter = 0;
+    switchThreshold = 10;
+    NIS_current = mhe.nMeasurements;
+    RunningFlag = true;
+    
+    dof_NIS = mhe.nMeasurements; % degrees of freedom (number of measurements)
+    alpha_NIS = 0.05;  % 95% confidence = 1 - alpha
+    lowerBound_NIS = chi2inv(alpha_NIS / 2, dof_NIS);
+    upperBound_NIS = chi2inv(1 - alpha_NIS / 2, dof_NIS);
+    useAdvancedControl = false;
+    
+    [K_lqr,~,~] = dlqr(mpc.A, mpc.B, Q_LQR, R_LQR);
+    
+    profile clear
+    profile on
+    
+    % Current switching logic: 
+    %   If NIS is inside bounds: increase switchCounter, if Nis exits bounds: reduce switchCounter. 
+    %   Whenever switchCounter > switchThreshold: use advanced control, else use LQR.
+    %   This hopefully leads to a smoother transition between control types.
+    while RunningFlag == true && iterCounter < (NT)
+        t_start = tic;
+        k = iterCounter;
+        iterCounter = iterCounter + 1;
+        
+    
+        if (NIS_current) >= lowerBound_NIS && (NIS_current <= upperBound_NIS)
+            switchCounter = switchCounter + 1;
+            if switchCounter > 2 * switchThreshold
+                switchCounter = 2 * switchThreshold;
             end
-        
-            if k<=40
-                [K_lqr,~,~] = dlqr(mpc.A, mpc.B, Q_LQR, R_LQR);
-                %K_dlqr = [120,120,120,120,120,5,5,5,5,5;120,120,120,120,120,5,5,5,5,5;120,120,120,120,120,5,5,5,5,5;120,120,120,120,120,5,5,5,5,5];
-                    %Kp = K_dlqr(:,1:nStates/2);
-                    %Kd = K_dlqr(:,nStates/2+1:nStates);
-                    %U_LQR = Kp*(xEst(1:nStates/2)) + Kd*(xEst(nStates/2+1:nStates));
-                U_LQR = -K_lqr*X_sim(:,k);
-        
-                U=U_LQR;
-        
-                fade_period=30:40;
-                if ismember(k,fade_period)
-                    [~, Uopt]=mpc.runMPC(X_sim(:,k));
-                    Udiff=U_LQR - Uopt;
-                    U = (1-gamma_f(k,fade_period))*U_LQR + gamma_f(k,fade_period)*Uopt;
-                end
-                
-                [T, X] = ode45(@(t, x) f(x, U, params), tspan, X_sim(:,k));
-                X_sim(:, k+1) = X(end, :)';
-        
-                U_sim(:,k) = U;
-                %X_sim(:,k+1) = mpc.A*X_sim(:,k) + mpc.B*U_sim(:,k);
-                newU=U_sim(:,k);
-        
-            else
-                [~, Uopt]=mpc.runMPC(X_sim(:,k));
-        
-                if k>=55 && k<60
-                    Uopt=Uopt;%+[20;20;20;20];
-                end
-                U_sim(:,k) = Uopt; %+ uRef;
-                %X_sim(:,k+1) = mpc.A*X_sim(:,k) + mpc.B*U_sim(:,k);
-                [T, X] = ode45(@(t, x) f(x, Uopt, params), tspan, X_sim(:,k));
-                X_sim(:, k+1) = X(end, :)';
-                newU=U_sim(:,k);
-                
+        else
+            switchCounter = switchCounter - 3;
+            if switchCounter < 0
+                switchCounter = 0;
             end
-            
-            
-            noise=noise_std*randn([nMeasurements,1]);
-            yNext(:,k+1) = C*X_sim(:,k+1)-C*xlp+noise;
-            % yNext(:, k+1) = h(X_sim(:, k+1), params);
-            yNext_f(:,k+1)=alpha*yNext(:,k+1) + (1-alpha)*yNext_f(:,k);
-            newY=yNext(:,k+1);
-            mhe=mhe.runMHE(newY,newU);
-            xEst=mhe.xCurrent;
-            MHE_est(:,k+1)=xEst;
-        
-        
-        catch
-            continue
         end
+    
+        if switchCounter > switchThreshold
+            useAdvancedControl = true;
+        else
+            useAdvancedControl = false;
+        end
+        
+        %disp(string(k) + ", Running with advanced control: " + ...
+        %        string(useAdvancedControl))
+    
+    
+        if iterCounter == mhe.N + 2
+            mhe.Q = 5e3 * mhe.Q;
+            mhe.G(mhe.nStates * (mhe.N+1) + 1 : mhe.nStates * (mhe.N+1) + ...
+                    mhe.nStates * mhe.N, mhe.nStates * (mhe.N+1) + 1 : ...
+                    mhe.nStates * (mhe.N+1) + mhe.nStates * mhe.N ) = ...
+                    kron(eye(mhe.N), mhe.weightScaling * mhe.Q);
+            % Here we increase Q after N_MHE+1 iterations when the MHE has calibrated. 
+            % This seems to improve performance?
+        end
+    
+        %use X_sim(:,k) or xEst for running MHE on true state or MHE estimates
+        if useAdvancedControl
+            [~, Uopt] = mpc.runMPC(X_sim(:, k));
+            U = Uopt;
+        else
+            U_LQR = -K_lqr * X_sim(:,k);
+            U = U_LQR;
+        end
+            
+    
+    
+        %[~, X] = ode15s(@(t, x) f(x, U, params), tspan, X_sim(:,k));
+        %X_sim(:, k+1) = X(end, :)'; 
+        X_sim(:, k+1) = RK4Step(@f, X_sim(:,k), U, dt, params);
+        U_sim(:, k) = U; 
+        newU = U_sim(:, k); %For MHE input
+    
+        noise = noise_std * randn([nMeasurements, 1]);
+        yNext(:, k+1) = C * X_sim(:, k+1) - C * xlp + noise; 
+        yNext_f(:, k+1) = alpha * yNext(:, k+1) + (1-alpha) * yNext_f(:, k); %EMA
+        newY = yNext_f(:, k+1); %For MHE input
+        mhe = mhe.runMHE(newY, newU); %Run MHE with newY and newU
+        xEst = mhe.xCurrent; % Extract xhat
+        MHE_est(:, k+1) = xEst;
+        vsol(:, k+1) = mhe.vCurrent;
+        wsol(:, k+1) = mhe.vCurrent;
+    
+    
+        NIS_current = mhe.currentNIS;
+        NIS_traj(k) = NIS_current;
+        Innovations_traj(:,k) = mhe.currentInnovation;
+        error = xEst - (X_sim(:, k+1) - xlp);
+        NEES_traj(k) = error' / mhe.currentP * error;
+    
+        %profile viewer
+        elapsed = toc(t_start);
     end
     
-    sim=X_sim;
-    est=MHE_est;
+    sim = X_sim;
+    est = MHE_est;
 end
 
 function gamma = gamma_f(k,fade_period)

@@ -79,6 +79,8 @@ classdef MHEclass
             % Discretizing dynamics and initializing P. 
             obj.A = expm(obj.Ac * obj.dt);
             obj.B = (obj.A - eye(size(obj.Ac))) * (obj.Ac \ obj.Bc);
+            %obj.A=eye(size(obj.Ac))+obj.Ac*obj.dt;
+            %obj.B=obj.Bc*obj.dt;
 
             obj.P = zeros(obj.nStates + obj.nMeasurements + obj.nControls, ...
                     1 + (obj.N+1) + obj.N); 

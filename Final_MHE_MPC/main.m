@@ -35,13 +35,13 @@ t = 2;
 N_MHE = 15;
 N_MPC = 10;
 dt = 0.004;
-NT = t/dt;
+NT = 250;
 
 %MHE tuning
 alpha = 0.9;
 noise_std = 0.1 * 1e-3; %0.1 mT
 R_MHE = inv(noise_std^2 * eye(nMeasurements));  
-Q_MHE = 10e3 * diag([100, 100, 10, 10, 100, 100, 100, 100, 100, 10]); 
+Q_MHE = 10e7 * diag([100, 100, 100, 100, 100, 100, 100, 100, 100, 100]); 
     %Start out with low Q during start up, then increase Q after N_MHE+1. 
     %See below in loop
 
@@ -160,7 +160,7 @@ while RunningFlag == true && iterCounter < (NT)
 
     %use X_sim(:,k) or xEst for running MHE on true state or MHE estimates
     if useAdvancedControl
-        [~, Uopt] = mpc.runMPC(X_sim(:, k));
+        [~, Uopt] = mpc.runMPC(X_sim(:,k));
         U = Uopt;
     else
         U_LQR = -K_lqr * X_sim(:,k);
@@ -197,8 +197,8 @@ while RunningFlag == true && iterCounter < (NT)
 end
 
 profile off
-save("Y_noisy_sim","yNext_f")
-save("U_list_sim","U_sim")
+save("data/Y_noisy_sim","yNext_f")
+save("data/U_list_sim","U_sim")
 
 %% Plot
 
