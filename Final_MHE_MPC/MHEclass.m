@@ -367,7 +367,7 @@ classdef MHEclass
 
             % Update P0 with the new arrival state covariance and update M
             obj.P0 = P_reg; 
-            newM = obj.weightScaling \ P_reg;
+            newM = obj.weightScaling *inv(P_reg);
             obj.M=1/2*(newM+transpose(newM));
 
             % Update arrival state xprior as xhat_{k-N+1} from QP solution

@@ -1,6 +1,6 @@
 clc,clear
 %addpath(genpath("3D model"))
-addpath(genpath('3D model reduced order_fixed'))
+addpath(genpath('3D model reduced order'))
 addpath(genpath('../qpOASES/interfaces/matlab'))
 
 
@@ -32,26 +32,26 @@ X0 = [0.003; 0.003; zeq+0.002; 0; 0; 0; 0; 0; 0; 0;];
 
 t = 2;
 
-N_MHE = 15;
+N_MHE = 10;
 N_MPC = 10;
-dt = 0.004;
-NT = 250;
+dt = 0.003;
+NT = 350;
 
 %MHE tuning
 alpha = 0.9;
 noise_std = 0.1 * 1e-3; %0.1 mT
 R_MHE = inv(noise_std^2 * eye(nMeasurements));  
-Q_MHE = 10e7 * diag([100, 100, 100, 100, 100, 100, 100, 100, 100, 100]); 
+Q_MHE=10e6*diag([100,100,10,10,100,100,100,100,100,10]); 
     %Start out with low Q during start up, then increase Q after N_MHE+1. 
     %See below in loop
 
 %Arrival cost weight initial guess (updates KF-style in loop)
-M_MHE = 1e5 * diag([5, 5, 5, 0.005, 005, 0.002, 0.002, 0.002, 0.0001, 0.0001]);
+M_MHE = 1e2*diag([5,5,5,0.005,005,0.002,0.002,0.002,0.0001,0.0001]);
 P0 = inv(M_MHE); % Arrival cost cov initial guess.
 weightScaling = 1e-4; %Scaling factor for better posing of QP
 
 %MPC and LQR tuning
-Q_MPC = diag([500, 500, 2000, 10, 10, 1, 1, 50, 1, 1]);
+Q_MPC = diag([500 500 2000 10 10 1 1 10 1 1]);
 R_MPC = diag([0.2, 0.2, 0.2, 0.2]);
 
 Q_LQR = diag([ ...
@@ -160,10 +160,10 @@ while RunningFlag == true && iterCounter < (NT)
 
     %use X_sim(:,k) or xEst for running MHE on true state or MHE estimates
     if useAdvancedControl
-        [~, Uopt] = mpc.runMPC(X_sim(:,k));
+        [~, Uopt] = mpc.runMPC(xEst);
         U = Uopt;
     else
-        U_LQR = -K_lqr * X_sim(:,k);
+        U_LQR = -K_lqr * xEst;
         U = U_LQR;
     end
         
