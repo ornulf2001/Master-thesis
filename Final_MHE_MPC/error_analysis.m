@@ -65,7 +65,7 @@ catch
     ylabel('RMSE');
     title('Plot of RMSE vs. N');
 end
-savefig('data/RMSE_vs_N.fig')
+savefig(folder + '/RMSE_vs_N.fig')
 
 
 

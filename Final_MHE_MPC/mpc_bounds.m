@@ -21,10 +21,10 @@ ubphidot = inf;
 lbthetadot = -inf;
 ubthetadot = inf;
 
-lbux = -inf;
-ubux = inf;
-lbuz = -inf;
-ubuz = inf;
+lbux = -2;
+ubux = 2;
+lbuz = -2;
+ubuz = 2;
 
 lbX1 = [lbx; lby; lbz; lbphi; lbtheta; lbxdot; lbydot; lbzdot; lbphidot; lbthetadot];
 ubX1 = [ubx; uby; ubz; ubphi; ubtheta; ubxdot; ubydot; ubzdot; ubphidot; ubthetadot];

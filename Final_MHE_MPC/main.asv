@@ -29,7 +29,7 @@ nMeasurements = size(C, 1);
 %% Tuning
 xRef = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0];
 X0 = [0.003; 0.003; zeq+0.002; 0; 0; 0; 0; 0; 0; 0;];
-MHE_x0 = zeros(nStates,1);
+
 t = 2;
 
 N_MHE = 10;
@@ -70,7 +70,7 @@ run("mpc_bounds.m") %currently inf all over
 MHE_options = optimset('Display','off', 'Diagnostics','off', ...
         'Algorithm', 'active-set');
 mhe = MHEclass(N_MHE, Ac, Bc, C, Q_MHE, R_MHE, M_MHE, weightScaling, ...
-        MHE_x0, xlp, P0, dt, MHE_options);
+        X0-xlp, xlp, P0, dt, MHE_options);
 
 MPC_options = optimset('Display', 'off', 'Diagnostics', 'off', ...
         'Algorithm', 'active-set');
@@ -165,7 +165,7 @@ while RunningFlag == true && iterCounter < (NT)
     if useAdvancedControl
         [~, Uopt] = mpc.runMPC(controllerMode);
         U = Uopt;
-        controllModeVec(k) = 1;
+        controllModeVec(k+1) = 1;
     else
         U_LQR = -K_lqr * controllerMode;
         U = U_LQR;
@@ -345,30 +345,28 @@ print(gcf, 'Figures/plot_'+controllerModePrint+'_AngularVelocity', '-dsvg');
 %% plot meas
 %Plotting devation measurements
 mhe_meas=C*MHE_est;
-meas_error=vecnorm(yNext_f-mhe_meas,2);
+meas_error=abs(yNext_f-mhe_meas);
 figure(5)
 clf
-subplot(3,1,1)
-var=1;
-plot(yNext_f(var,:)); hold on
-plot(mhe_meas(var,:))
-legend(["meas","est"])
+% subplot(3,1,1)
+% var=7;
+% plot(yNext_f(var,:)); hold on
+% plot(mhe_meas(var,:))
+% legend(["meas","est"])
+% 
+% subplot(3,1,2)
+% plot(yNext_f(var+1,:)); hold on
+% plot(mhe_meas(var+1,:))
+% legend(["meas","est"])
+% 
+% subplot(3,1,3)
+% plot(yNext_f(var+2,:)); hold on
+% plot(mhe_meas(var+2,:))
+% legend(["meas","est"])
 
-subplot(3,1,2)
-plot(yNext_f(var+1,:)); hold on
-plot(mhe_meas(var+1,:))
-legend(["meas","est"])
-
-subplot(3,1,3)
-plot(yNext_f(var+2,:)); hold on
-plot(mhe_meas(var+2,:))
-legend(["meas","est"])
-
-figure(101);clf
 %plot(tvec,yNext_f(1:9,:),"r-"); hold on
 %plot(tvec,mhe_meas(1:9,:),"b--")
 plot(tvec,meas_error(:,:))
-title("Vector norm of Y-C*xEst")
 print(gcf, 'Figures/plot_'+controllerModePrint+'_EstMeas', '-dsvg');
 
 
@@ -441,11 +439,11 @@ end
 figure(100);clf
 plot(tvec(1:end-1),U_sim(:,:), 'LineWidth', lineWidth); hold on
 set(gca, 'FontName', fontName, 'FontSize', fontSize);
-ylabel("Control input [A]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
+ylabel("$\dot{\beta}$ [rad/s]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
 xlabel("Iterations", 'Interpreter','latex', 'FontSize', labelFontSize)
 yl = get(gca, 'YLim');ylim(yl)
 shadeMPCregions(tvec,controllModeVec,yl)
-legend({"$u_{x,p}$","$u_{y,p}$","$u_{x,n}$","$u_{y,n}$","MPC active"}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast')
+legend({"Ixplus","Ixminus","Iyplus","Iyminus","MPC active"}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast')
 
 %Zoom-in box (Manually located)
 axInset = axes('Position', [0.3, 0.55, 0.25, 0.25]);  % [x y width height]
