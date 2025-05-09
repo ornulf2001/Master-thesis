@@ -1,17 +1,18 @@
 clc, clear
-addpath(genpath('3D model reduced order'))
+addpath(genpath('3D model reduced order_fixed'))
 
-N = 10:2:10;           % Range of N
+N = 2:2:30;           % Range of N
 dt = 0.003;          % Range of dt (can be vector later)
 
 [NGrid, dtGrid] = meshgrid(N, dt);
 [nDt, nN] = size(NGrid);
-nSim = 2;            % Number of Monte Carlo simulations
+nSim = 3;            % Number of Monte Carlo simulations
 
 NT = 500;
 RMSE = zeros(nDt, nN, nSim);
 sims = zeros(10, NT, numel(NGrid),nSim);
 ests = zeros(10, NT, numel(NGrid),nSim);
+runtimes = zeros(nSim,numel(NGrid));
 for k = 1:nSim
     for i = 1:numel(NGrid)
         [row, col] = ind2sub(size(NGrid), i);
@@ -29,7 +30,7 @@ for k = 1:nSim
 
         error = sim - est;
         RMSE(row, col, k) = sqrt(mean(error(:).^2));
-        toc
+        runtimes(k,i)=toc;
     end
 end
 
@@ -60,9 +61,14 @@ try %Generally fails of length(dt)=1 -> RMSE is vector not grid
     title('Surface plot of RMSE vs. N and dt');
 
 catch
-    plot(N,RMSE_mean, "-r"); grid on; 
-    xlabel('Horizon Length N');
+    yyaxis left
+    plot(N,RMSE_mean); grid on; hold on;
     ylabel('RMSE');
+
+    yyaxis right
+    plot(N,mean(runtimes,1))
+    ylabel("runtimes")
+    xlabel('Horizon Length N');
     title('Plot of RMSE vs. N');
 end
 savefig(folder + '/RMSE_vs_N.fig')
@@ -103,32 +109,33 @@ function [sim,est]=runSystem(N,dt,NT)
     nControls = size(Bc, 2);
     nMeasurements = size(C, 1);
     
-    % Tuning
+    %% Tuning
     xRef = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0];
-    X0 = [0.003; 0.003; zeq+0.002; 0; 0; 0; 0; 0; 0; 0;];
-    
+    X0 = [0; 0; zeq; 0; 0; 0; 0; 0; 0; 0;];
+    MHE_x0 = X0-xlp;%zeros(nStates,1);
     t = 2;
     
     N_MHE = N;
     N_MPC = 10;
-    %dt = dt;
-    %NT = t/dt;
+    %dt = 0.003;
+    %NT = 350;
+    tvec = 0:1:NT-1;
     
     %MHE tuning
     alpha = 0.9;
     noise_std = 0.1 * 1e-3; %0.1 mT
     R_MHE = inv(noise_std^2 * eye(nMeasurements));  
-    Q_MHE = 10e3 * diag([100, 100, 10, 10, 100, 100, 100, 100, 100, 10]); 
-        %Start out with low Q during start up, then increase Q after N_MHE+1. 
-        %See below in loop
-    
+    Q_MHE=10e3*diag([100,100,100,100,100,500,500,500,500,500]); 
+    %Start out with low Q during start up, then increase Q after N_MHE+1. 
+    %See below in loop
+
     %Arrival cost weight initial guess (updates KF-style in loop)
-    M_MHE = 1e5 * diag([5, 5, 5, 0.005, 005, 0.002, 0.002, 0.002, 0.0001, 0.0001]);
+    M_MHE = 1e0*diag([5,5,5,0.005,005,0.002,0.002,0.002,0.0001,0.0001]);
     P0 = inv(M_MHE); % Arrival cost cov initial guess.
     weightScaling = 1e-4; %Scaling factor for better posing of QP
     
     %MPC and LQR tuning
-    Q_MPC = diag([500, 500, 2000, 10, 10, 1, 1, 50, 1, 1]);
+    Q_MPC = diag([500 500 2000 10 10 1 1 10 1 1]);
     R_MPC = diag([0.2, 0.2, 0.2, 0.2]);
     
     Q_LQR = diag([ ...
@@ -140,13 +147,13 @@ function [sim,est]=runSystem(N,dt,NT)
     % Bounds
     run("mpc_bounds.m") %currently inf all over
     
-    % Run
+    %% Run
     
     %MHE_options = qpOASES_options();
     MHE_options = optimset('Display','off', 'Diagnostics','off', ...
             'Algorithm', 'active-set');
     mhe = MHEclass(N_MHE, Ac, Bc, C, Q_MHE, R_MHE, M_MHE, weightScaling, ...
-            X0-xlp, xlp, P0, dt, MHE_options);
+            MHE_x0, xlp, P0, dt, MHE_options);
     
     MPC_options = optimset('Display', 'off', 'Diagnostics', 'off', ...
             'Algorithm', 'active-set');
@@ -172,6 +179,7 @@ function [sim,est]=runSystem(N,dt,NT)
     xNext = X0;
     X_sim(:, 1) = X0;
     tspan = [0, dt];
+    controllModeVec = zeros(1,NT);
     
     % Calculating the reference input for stabilizing in the reference point
     uRef = mpc.computeReferenceInput(); 
@@ -222,7 +230,7 @@ function [sim,est]=runSystem(N,dt,NT)
         end
         
         %disp(string(k) + ", Running with advanced control: " + ...
-        %        string(useAdvancedControl))
+               % string(useAdvancedControl))
     
     
         if iterCounter == mhe.N + 2
@@ -235,12 +243,14 @@ function [sim,est]=runSystem(N,dt,NT)
             % This seems to improve performance?
         end
     
-        %use X_sim(:,k) or xEst for running MHE on true state or MHE estimates
+        %use controllerMode = X_sim(:,k) or xEst for running MHE on true state or MHE estimates
+        controllerMode = X_sim(:,k); if controllerMode ==xEst; controllerModePrint="xEst"; elseif controllerMode == X_sim(:,k); controllerModePrint="Xsim";end
         if useAdvancedControl
-            [~, Uopt] = mpc.runMPC(X_sim(:, k));
+            [~, Uopt] = mpc.runMPC(controllerMode);
             U = Uopt;
+            controllModeVec(k) = 1;
         else
-            U_LQR = -K_lqr * X_sim(:,k);
+            U_LQR = -K_lqr * controllerMode;
             U = U_LQR;
         end
             

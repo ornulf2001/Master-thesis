@@ -42,12 +42,12 @@ tvec = 0:1:NT-1;
 alpha = 0.9;
 noise_std = 0.1 * 1e-3; %0.1 mT
 R_MHE = inv(noise_std^2 * eye(nMeasurements));  
-Q_MHE=10e6*diag([100,100,10,10,100,100,100,100,100,10]); 
+Q_MHE=10e3*diag([100,100,100,100,100,500,500,500,500,500]); 
     %Start out with low Q during start up, then increase Q after N_MHE+1. 
     %See below in loop
 
 %Arrival cost weight initial guess (updates KF-style in loop)
-M_MHE = 1e2*diag([5,5,5,0.005,005,0.002,0.002,0.002,0.0001,0.0001]);
+M_MHE = 1e0*diag([5,5,5,0.005,005,0.002,0.002,0.002,0.0001,0.0001]);
 P0 = inv(M_MHE); % Arrival cost cov initial guess.
 weightScaling = 1e-4; %Scaling factor for better posing of QP
 
@@ -97,6 +97,7 @@ xNext = X0;
 X_sim(:, 1) = X0;
 tspan = [0, dt];
 controllModeVec = zeros(1,NT);
+toterror=0;
 
 % Calculating the reference input for stabilizing in the reference point
 uRef = mpc.computeReferenceInput(); 
@@ -194,19 +195,25 @@ while RunningFlag == true && iterCounter < (NT)
     NIS_traj(k) = NIS_current;
     Innovations_traj(:,k) = mhe.currentInnovation;
     error = xEst - (X_sim(:, k+1) - xlp);
+    toterror = toterror + vecnorm(error,2);
     NEES_traj(k) = error' / mhe.currentP * error;
 
     %profile viewer
     elapsed = toc(t_start)
 end
-
+%%
+error_traj = (X_sim-xlp)-MHE_est;
+RMSE = sqrt(mean(error_traj.^2,2));
+RMSE2 = sqrt(mean(error(:).^2));
 profile off
 save("data/Y_noisy_sim","yNext_f")
 save("data/U_list_sim","U_sim")
 
 %% Plot
 % Shared settings
-fontName = 'Times New Roman';
+set(groot, 'defaultTextInterpreter','latex');
+set(groot, 'defaultAxesTickLabelInterpreter','latex');
+set(groot, 'defaultLegendInterpreter','latex');
 fontSize = 14;
 labelFontSize = 18;
 lineWidth = 1.5;
@@ -218,9 +225,9 @@ figure(1); clf
 subplot(3,1,1)
 plot(tvec, X_sim(1,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
 plot(tvec, MHE_est(1,:), 'b--', 'LineWidth', lineWidth);
-set(gca, 'FontName', fontName, 'FontSize', fontSize);
+set(gca,  'FontSize', fontSize);
 ylabel('$x$ [m]', 'Interpreter','latex', 'FontSize', labelFontSize);
-title('Position', 'FontSize', labelFontSize+2, 'FontName', fontName)
+title('Position', 'FontSize', labelFontSize+2)
 yl = get(gca, 'YLim');ylim(yl)
 shadeMPCregions(tvec, controllModeVec,yl);
 legend({'Simulation','Estimates', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
@@ -229,7 +236,7 @@ legend({'Simulation','Estimates', 'MPC active'}, 'Interpreter','latex', 'FontSiz
 subplot(3,1,2)
 plot(tvec, X_sim(2,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
 plot(tvec, MHE_est(2,:), 'b--', 'LineWidth', lineWidth);
-set(gca, 'FontName', fontName, 'FontSize', fontSize);
+set(gca,  'FontSize', fontSize);
 ylabel('$y$ [m]', 'Interpreter','latex', 'FontSize', labelFontSize);
 shadeMPCregions(tvec, controllModeVec,yl);
 yl = get(gca, 'YLim');ylim(yl)
@@ -240,7 +247,7 @@ subplot(3,1,3)
 plot(tvec, X_sim(3,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
 plot(tvec, MHE_est(3,:) + zeq, 'b--', 'LineWidth', lineWidth);
 yline(zeq, 'k-.', 'LineWidth', lineWidth);
-set(gca, 'FontName', fontName, 'FontSize', fontSize);
+set(gca,  'FontSize', fontSize);
 ylabel('$z$ [m]', 'Interpreter','latex', 'FontSize', labelFontSize);
 xlabel('Iterations', 'Interpreter','latex', 'FontSize', labelFontSize);
 yl = get(gca, 'YLim');ylim(yl)
@@ -257,9 +264,9 @@ clf
 subplot(2,1,1)
 plot(tvec,X_sim(4,:), "r-", 'LineWidth',lineWidth); hold on; grid on;
 plot(tvec,MHE_est(4,:), "b--",'LineWidth',lineWidth)
-set(gca, 'FontName', fontName, 'FontSize', fontSize);
+set(gca,  'FontSize', fontSize);
 ylabel("$\alpha$ [rad]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
-title("Angle", 'FontSize',labelFontSize+2, 'FontName',fontName)
+title("Angle", 'FontSize',labelFontSize+2)
 yl = get(gca, 'YLim');ylim(yl)
 shadeMPCregions(tvec,controllModeVec,yl)
 legend({"Simulation","Estimates", 'MPC active'}, 'Interpreter', 'latex', 'FontSize', fontSize, 'location', 'northeast')
@@ -267,7 +274,7 @@ legend({"Simulation","Estimates", 'MPC active'}, 'Interpreter', 'latex', 'FontSi
 subplot(2,1,2)
 plot(tvec,X_sim(5,:), "r-", 'LineWidth',lineWidth); hold on; grid on;
 plot(tvec,MHE_est(5,:), "b--",'LineWidth',lineWidth)
-set(gca, 'FontName', fontName, 'FontSize', fontSize);
+set(gca,  'FontSize', fontSize);
 ylabel("$\beta$ [rad]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
 xlabel("Iterations", 'Interpreter','latex', 'FontSize', labelFontSize)
 yl = get(gca, 'YLim');ylim(yl)
@@ -284,9 +291,9 @@ figure(3); clf
 subplot(3,1,1)
 plot(tvec, X_sim(6,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
 plot(tvec, MHE_est(6,:), 'b--', 'LineWidth', lineWidth);
-set(gca, 'FontName', fontName, 'FontSize', fontSize);
+set(gca,  'FontSize', fontSize);
 ylabel('$\dot{x}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
-title('Velocity', 'FontSize', labelFontSize+2, 'FontName', fontName)
+title('Velocity', 'FontSize', labelFontSize+2)
 yl = get(gca, 'YLim');ylim(yl)
 shadeMPCregions(tvec, controllModeVec,yl);
 legend({'Simulation','Estimates', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
@@ -295,7 +302,7 @@ legend({'Simulation','Estimates', 'MPC active'}, 'Interpreter','latex', 'FontSiz
 subplot(3,1,2)
 plot(tvec, X_sim(7,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
 plot(tvec, MHE_est(7,:), 'b--', 'LineWidth', lineWidth);
-set(gca, 'FontName', fontName, 'FontSize', fontSize);
+set(gca,  'FontSize', fontSize);
 ylabel('$\dot{y}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
 shadeMPCregions(tvec, controllModeVec,yl);
 yl = get(gca, 'YLim');ylim(yl)
@@ -305,7 +312,7 @@ legend({'Simulation','Estimates', 'MPC active'}, 'Interpreter','latex', 'FontSiz
 subplot(3,1,3)
 plot(tvec, X_sim(8,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
 plot(tvec, MHE_est(8,:), 'b--', 'LineWidth', lineWidth);
-set(gca, 'FontName', fontName, 'FontSize', fontSize);
+set(gca,  'FontSize', fontSize);
 ylabel('$\dot{z}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
 xlabel('Iterations', 'Interpreter','latex', 'FontSize', labelFontSize);
 yl = get(gca, 'YLim');ylim(yl)
@@ -323,9 +330,9 @@ clf
 subplot(2,1,1)
 plot(tvec,X_sim(9,:), "r-", 'LineWidth',lineWidth); hold on; grid on;
 plot(tvec,MHE_est(9,:), "b--",'LineWidth',lineWidth)
-set(gca, 'FontName', fontName, 'FontSize', fontSize);
+set(gca,  'FontSize', fontSize);
 ylabel("$\dot{\alpha}$ [rad/s]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
-title("Angular velocity", 'FontSize',labelFontSize+2, 'FontName',fontName)
+title("Angular velocity", 'FontSize',labelFontSize+2)
 yl = get(gca, 'YLim');ylim(yl)
 shadeMPCregions(tvec,controllModeVec,yl)
 legend({"Simulation","Estimates", 'MPC active'}, 'Interpreter', 'latex', 'FontSize', fontSize, 'location', 'northeast')
@@ -333,7 +340,7 @@ legend({"Simulation","Estimates", 'MPC active'}, 'Interpreter', 'latex', 'FontSi
 subplot(2,1,2)
 plot(tvec,X_sim(10,:), "r-", 'LineWidth',lineWidth); hold on; grid on;
 plot(tvec,MHE_est(10,:), "b--",'LineWidth',lineWidth)
-set(gca, 'FontName', fontName, 'FontSize', fontSize);
+set(gca,  'FontSize', fontSize);
 ylabel("$\dot{\beta}$ [rad/s]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
 xlabel("Iterations", 'Interpreter','latex', 'FontSize', labelFontSize)
 yl = get(gca, 'YLim');ylim(yl)
@@ -379,10 +386,11 @@ clf
 plot(NIS_traj, 'LineWidth', lineWidth); hold on;
 yline(lowerBound_NIS, '--r', 'LineWidth', lineWidth);
 yline(upperBound_NIS, '--r', 'LineWidth', lineWidth);
-set(gca, 'FontName', fontName, 'FontSize', fontSize);
+set(gca,  'FontSize', fontSize);
 xlabel('Time', 'Interpreter','latex', 'FontSize', labelFontSize);
 ylabel('NIS', 'Interpreter','latex', 'FontSize', labelFontSize);
-title(['NIS trajectory with 95% Chi-square bounds (DoF = ' num2str(mhe.nMeasurements) ')'], 'FontSize',labelFontSize+2, 'FontName',fontName);
+title(['NIS trajectory with 95\% Chi-square bounds (DoF = ' num2str(mhe.nMeasurements) ')'], ...
+    'FontSize', labelFontSize+2, 'Interpreter', 'latex');
 grid on;
 ylim([-0,40])
 yl = get(gca, 'YLim');ylim(yl)
@@ -404,7 +412,7 @@ yline(lowerBound_NEES, '--r', 'LineWidth', lineWidth);
 yline(upperBound_NEES, '--r', 'LineWidth', lineWidth);
 xlabel('Time', 'Interpreter','latex', 'FontSize', labelFontSize);
 ylabel('NEES', 'Interpreter','latex', 'FontSize', labelFontSize);
-title(['NEES trajectory with 95% Chi-square bounds (DoF = ' num2str(mhe.nStates) ')'], 'FontSize',labelFontSize+2, 'FontName',fontName);
+title(['NEES trajectory with 95\% Chi-square bounds (DoF = ' num2str(mhe.nStates) ')'], 'FontSize',labelFontSize+2, 'Interpreter','latex');
 ylim([-0,70])
 yl = get(gca, 'YLim');ylim(yl)
 shadeMPCregions(tvec,controllModeVec,yl)
@@ -440,9 +448,10 @@ end
 %%
 figure(100);clf
 plot(tvec(1:end-1),U_sim(:,:), 'LineWidth', lineWidth); hold on
-set(gca, 'FontName', fontName, 'FontSize', fontSize);
-ylabel("Control input [A]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
+set(gca,  'FontSize', fontSize);
+ylabel("Solenoid current [A]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
 xlabel("Iterations", 'Interpreter','latex', 'FontSize', labelFontSize)
+title("Control input", 'FontSize',labelFontSize+2)
 yl = get(gca, 'YLim');ylim(yl)
 shadeMPCregions(tvec,controllModeVec,yl)
 legend({"$u_{x,p}$","$u_{y,p}$","$u_{x,n}$","$u_{y,n}$","MPC active"}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast')
