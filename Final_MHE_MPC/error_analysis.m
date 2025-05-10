@@ -2,7 +2,7 @@ clc, clear
 addpath(genpath('3D model reduced order_fixed'))
 
 N = 2:2:30;           % Range of N
-dt = 0.003;          % Range of dt (can be vector later)
+dt = 0.001:0.001:0.01;          % Range of dt (can be vector later)
 
 [NGrid, dtGrid] = meshgrid(N, dt);
 [nDt, nN] = size(NGrid);
@@ -12,7 +12,7 @@ NT = 500;
 RMSE = zeros(nDt, nN, nSim);
 sims = zeros(10, NT, numel(NGrid),nSim);
 ests = zeros(10, NT, numel(NGrid),nSim);
-runtimes = zeros(nSim,numel(NGrid));
+runtimes = zeros(nDt,nN,nSim);
 for k = 1:nSim
     for i = 1:numel(NGrid)
         [row, col] = ind2sub(size(NGrid), i);
@@ -30,7 +30,7 @@ for k = 1:nSim
 
         error = sim - est;
         RMSE(row, col, k) = sqrt(mean(error(:).^2));
-        runtimes(k,i)=toc;
+        runtimes(row,col,k)=toc;
     end
 end
 
@@ -47,13 +47,15 @@ save(folder + "/RMSEtotal","RMSE")
 save(folder + "/sims","sims")
 save(folder + "/ests","ests")
 save(folder + "/RMSEmean","RMSE_mean")
+save(folder + '/runtimes','runtimes')
 
 %% plot
 figure(1)
 clf
 
 try %Generally fails of length(dt)=1 -> RMSE is vector not grid
-    surf(NGrid, dtGrid, RMSE_mean); grid on
+    surf(NGrid, dtGrid, RMSE_mean); grid on; hold on
+   % surf(NGrid, dtGrid, mean(runtimes,3))
     colorbar
     xlabel('Horizon Length N');
     ylabel('Time Step dt');
