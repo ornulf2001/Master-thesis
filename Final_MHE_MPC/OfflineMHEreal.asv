@@ -201,7 +201,7 @@ set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 25]) % or [left bottom widt
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 25])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/MHEreal/MHE_vs_KF_EstMeas1_'+string(N_MHE), '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/MHEreal/MHE_vs_KF_EstMeas1', '-dpdf', '-vector', '-fillpage');
 
 figure(6);clf
 t=tiledlayout(3,1,'TileSpacing', 'compact', 'Padding', 'compact');
@@ -209,9 +209,8 @@ sgtitle('\textbf{Raw measurements vs. measured estimates of physical system}','i
 
 nexttile
 plot(tvec,Y_noisy(4,:),'color',color1, 'LineWidth',lineWidth-0.5); hold on; grid on
-plot(tvec,KF_meas(4,:),'color',color3, 'lineStyle',linestyle2,'LineWidth',lineWidth);
 plot(tvec,MHE_meas(4,:),'color',color2, 'lineStyle',linestyle2,'LineWidth',lineWidth);
-
+plot(tvec,KF_meas(4,:),'color',color3, 'lineStyle',linestyle2,'LineWidth',lineWidth);
 title('\textit{Sensor $2$}','interpreter','latex','FontSize', labelFontSize-2)
 set(gca, 'XTickLabel', [], 'FontSize', fontSize);
 ylabel('$b_x$ [T]', 'Interpreter','latex', 'FontSize', labelFontSize);
@@ -219,9 +218,8 @@ axis tight
 
 nexttile
 plot(tvec,Y_noisy(5,:),'color',color1, 'LineWidth',lineWidth-0.5); hold on; grid on
-plot(tvec,KF_meas(5,:),'color',color3, 'lineStyle',linestyle2,'LineWidth',lineWidth);
 plot(tvec,MHE_meas(5,:),'color',color2, 'lineStyle',linestyle2,'LineWidth',lineWidth);
-
+plot(tvec,KF_meas(5,:),'color',color3, 'lineStyle',linestyle2,'LineWidth',lineWidth);
 set(gca, 'XTickLabel', [], 'FontSize', fontSize);
 ylabel('$b_y$ [T]', 'Interpreter','latex', 'FontSize', labelFontSize);
 axis tight
@@ -229,23 +227,22 @@ axis tight
 
 nexttile
 plot(tvec,Y_noisy(6,:),'color',color1, 'LineWidth',lineWidth-0.5); hold on; grid on
-plot(tvec,KF_meas(6,:),'color',color3, 'lineStyle',linestyle2,'LineWidth',lineWidth);
 plot(tvec,MHE_meas(6,:),'color',color2, 'lineStyle',linestyle2,'LineWidth',lineWidth);
-
+plot(tvec,KF_meas(6,:),'color',color3, 'lineStyle',linestyle2,'LineWidth',lineWidth);
 set(gca,  'FontSize', fontSize);
 ylabel('$b_z$ [T]', 'Interpreter','latex', 'FontSize', labelFontSize);
 xlabel('Time [s]', 'Interpreter','latex', 'FontSize', labelFontSize);
 axis tight
 
 
-l = legend(t.Children(end), {'Raw measurements', 'Measured KF estimates','Measured MHE estimates'}, 'Orientation', 'horizontal', 'Interpreter','latex', 'FontSize', fontSize);
+l = legend(t.Children(end), {'Raw measurements','Measured MHE estimates', 'Measured KF estimates'}, 'Orientation', 'horizontal', 'Interpreter','latex', 'FontSize', fontSize);
 l.Layout.Tile = 'south'; % places legend below all plots
 
 set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 25]) % or [left bottom width height]
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 25])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/MHEreal/MHE_vs_KF_EstMeas2_'+string(N_MHE), '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/MHEreal/MHE_vs_KF_EstMeas2', '-dpdf', '-vector', '-fillpage');
 
 figure(7);clf
 t=tiledlayout(3,1,'TileSpacing', 'compact', 'Padding', 'compact');
@@ -253,9 +250,8 @@ sgtitle('\textbf{Raw measurements vs. measured estimates of physical system}','i
 
 nexttile
 plot(tvec,Y_noisy(7,:),'color',color1, 'LineWidth',lineWidth-0.5); hold on; grid on
-plot(tvec,KF_meas(7,:),'color',color3, 'lineStyle',linestyle2,'LineWidth',lineWidth);
 plot(tvec,MHE_meas(7,:),'color',color2, 'lineStyle',linestyle2,'LineWidth',lineWidth);
-
+plot(tvec,KF_meas(7,:),'color',color3, 'lineStyle',linestyle2,'LineWidth',lineWidth);
 title('\textit{Sensor $3$}','interpreter','latex','FontSize', labelFontSize-2)
 set(gca, 'XTickLabel', [], 'FontSize', fontSize);
 ylabel('$b_x$ [T]', 'Interpreter','latex', 'FontSize', labelFontSize);
@@ -263,9 +259,8 @@ axis tight
 
 nexttile
 plot(tvec,Y_noisy(8,:),'color',color1, 'LineWidth',lineWidth-0.5); hold on; grid on
-plot(tvec,KF_meas(8,:),'color',color3, 'lineStyle',linestyle2,'LineWidth',lineWidth);
 plot(tvec,MHE_meas(8,:),'color',color2, 'lineStyle',linestyle2,'LineWidth',lineWidth);
-
+plot(tvec,KF_meas(8,:),'color',color3, 'lineStyle',linestyle2,'LineWidth',lineWidth);
 set(gca, 'XTickLabel', [], 'FontSize', fontSize);
 ylabel('$b_y$ [T]', 'Interpreter','latex', 'FontSize', labelFontSize);
 axis tight
@@ -273,9 +268,8 @@ axis tight
 
 nexttile
 plot(tvec,Y_noisy(9,:),'color',color1, 'LineWidth',lineWidth-0.5); hold on; grid on
-plot(tvec,KF_meas(9,:),'color',color3, 'lineStyle',linestyle2,'LineWidth',lineWidth);
 plot(tvec,MHE_meas(9,:),'color',color2, 'lineStyle',linestyle2,'LineWidth',lineWidth);
-
+plot(tvec,KF_meas(9,:),'color',color3, 'lineStyle',linestyle2,'LineWidth',lineWidth);
 set(gca, 'FontSize', fontSize);
 ylabel('$b_z$ [T]', 'Interpreter','latex', 'FontSize', labelFontSize);
 xlabel('Time [s]', 'Interpreter','latex', 'FontSize', labelFontSize);
@@ -283,14 +277,14 @@ xlabel('Time [s]', 'Interpreter','latex', 'FontSize', labelFontSize);
 axis tight
 
 
-l = legend(t.Children(end), {'Raw measurements', 'Measured KF estimates','Measured MHE estimates'}, 'Orientation', 'horizontal', 'Interpreter','latex', 'FontSize', fontSize);
+l = legend(t.Children(end), {'Raw measurements','Measured MHE estimates', 'Measured KF estimates'}, 'Orientation', 'horizontal', 'Interpreter','latex', 'FontSize', fontSize);
 l.Layout.Tile = 'south'; % places legend below all plots
 
 set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 25]) % or [left bottom width height]
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 25])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/MHEreal/MHE_vs_KF_EstMeas3_'+string(N_MHE), '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/MHEreal/MHE_vs_KF_EstMeas3', '-dpdf', '-vector', '-fillpage');
 
 
 
@@ -312,9 +306,8 @@ t=tiledlayout(5,1,'TileSpacing', 'compact', 'Padding', 'compact');
 sgtitle('$\textbf{MHE estimates vs. KF estimates of physical system}$','interpreter','latex','FontSize', labelFontSize-10)
 
 nexttile
-plot(tvec, KF_est(1,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth); hold on; grid on;
-plot(tvec, MHE_est(1,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth);
-
+plot(tvec, MHE_est(1,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec, KF_est(1,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);
 title('\textit{Position and orientation}','interpreter','latex','FontSize', labelFontSize-2)
 set(gca,  'XTickLabel', [],'FontSize', fontSize);
 ylabel('$x$ [m]', 'Interpreter','latex', 'FontSize', labelFontSize);
@@ -322,18 +315,16 @@ yl = get(gca, 'YLim');ylim(yl)
 axis tight
 
 nexttile
-plot(tvec, KF_est(2,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);hold on; grid on;
-plot(tvec, MHE_est(2,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); 
-
+plot(tvec, MHE_est(2,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec, KF_est(2,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);
 set(gca,  'XTickLabel', [],'FontSize', fontSize);
 ylabel('$y$ [m]', 'Interpreter','latex', 'FontSize', labelFontSize);
 yl = get(gca, 'YLim');ylim(yl)
 axis tight
 
 nexttile
-plot(tvec, KF_est(3,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);hold on; grid on;
-plot(tvec, MHE_est(3,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); 
-
+plot(tvec, MHE_est(3,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec, KF_est(3,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);
 set(gca,  'XTickLabel', [],'FontSize', fontSize);
 ylabel('$z$ [m]', 'Interpreter','latex', 'FontSize', labelFontSize);
 yl = get(gca, 'YLim');ylim(yl)
@@ -341,34 +332,30 @@ axis tight
 
 
 nexttile
-plot(tvec, KF_est(4,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);hold on; grid on;
-plot(tvec, MHE_est(4,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); 
-
+plot(tvec, MHE_est(4,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec, KF_est(4,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);
 set(gca,  'XTickLabel', [],'FontSize', fontSize);
 ylabel('$\alpha$ [rad]', 'Interpreter','latex', 'FontSize', labelFontSize);
 yl = get(gca, 'YLim');ylim(yl)
 axis tight
 
 nexttile
-plot(tvec, KF_est(5,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth); hold on; grid on;
-plot(tvec, MHE_est(5,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth);
-
-set(gca,  'FontSize', fontSize);
+plot(tvec, MHE_est(5,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec, KF_est(5,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);
+set(gca,  'XTickLabel', [],'FontSize', fontSize);
 ylabel('$\beta$ [rad]', 'Interpreter','latex', 'FontSize', labelFontSize);
-xlabel('Time [s]', 'Interpreter','latex', 'FontSize', labelFontSize);
-
 yl = get(gca, 'YLim');ylim(yl)
 axis tight
 
 
-l = legend(t.Children(end), {'KF estimates','MHE estimates'}, 'Orientation', 'horizontal', 'Interpreter','latex', 'FontSize', fontSize);
+l = legend(t.Children(end), {'MHE estimates','KF estimates'}, 'Orientation', 'horizontal', 'Interpreter','latex', 'FontSize', fontSize);
 l.Layout.Tile = 'south'; % places legend below all plots
 
 set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 44]) % or [left bottom width height]
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 44])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/MHEreal/MHE_vs_KF_pos_'+string(N_MHE), '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/MHEreal/MHE_vs_KF_pos', '-dpdf', '-vector', '-fillpage');
 
 
 %%
@@ -387,8 +374,8 @@ t=tiledlayout(5,1,'TileSpacing', 'compact', 'Padding', 'compact');
 sgtitle('$\textbf{MHE estimates vs. KF estimates of physical system}$','interpreter','latex','FontSize', labelFontSize-10)
 
 nexttile
-plot(tvec, KF_est(6,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);hold on; grid on;
-plot(tvec, MHE_est(6,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); 
+plot(tvec, MHE_est(6,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec, KF_est(6,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);
 title('\textit{Translational and angular velocity}','interpreter','latex','FontSize', labelFontSize-2)
 set(gca,  'XTickLabel', [],'FontSize', fontSize);
 ylabel('$\dot{x}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
@@ -396,16 +383,16 @@ yl = get(gca, 'YLim');ylim(yl)
 axis tight
 
 nexttile
-plot(tvec, KF_est(7,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);hold on; grid on;
-plot(tvec, MHE_est(7,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); 
+plot(tvec, MHE_est(7,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec, KF_est(7,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);
 set(gca,  'XTickLabel', [],'FontSize', fontSize);
 ylabel('$\dot{y}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
 yl = get(gca, 'YLim');ylim(yl)
 axis tight
 
 nexttile
-plot(tvec, KF_est(8,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);hold on; grid on;
-plot(tvec, MHE_est(8,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); 
+plot(tvec, MHE_est(8,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec, KF_est(8,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);
 set(gca,  'XTickLabel', [],'FontSize', fontSize);
 ylabel('$\dot{z}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
 yl = get(gca, 'YLim');ylim(yl)
@@ -413,33 +400,30 @@ axis tight
 
 
 nexttile
-plot(tvec, KF_est(9,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);hold on; grid on;
-plot(tvec, MHE_est(9,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); 
-
+plot(tvec, MHE_est(9,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec, KF_est(9,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);
 set(gca,  'XTickLabel', [],'FontSize', fontSize);
 ylabel('$\dot{\alpha}$ [rad/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
 yl = get(gca, 'YLim');ylim(yl)
 axis tight
 
 nexttile
-plot(tvec, KF_est(10,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth); hold on; grid on;
-plot(tvec, MHE_est(10,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth);
-set(gca,'FontSize', fontSize);
+plot(tvec, MHE_est(10,:), 'color',color2, 'lineStyle',linestyle2, 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec, KF_est(10,:), 'color', color3, 'lineStyle', linestyle2, 'LineWidth', lineWidth);
+set(gca,  'XTickLabel', [],'FontSize', fontSize);
 ylabel('$\dot{\beta}$ [rad/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
-xlabel('Time [s]', 'Interpreter','latex', 'FontSize', labelFontSize);
-
 yl = get(gca, 'YLim');ylim(yl)
 axis tight
 
 
-l = legend(t.Children(end), {'KF estimates','MHE estimates'}, 'Orientation', 'horizontal', 'Interpreter','latex', 'FontSize', fontSize);
+l = legend(t.Children(end), {'MHE estimates','KF estimates'}, 'Orientation', 'horizontal', 'Interpreter','latex', 'FontSize', fontSize);
 l.Layout.Tile = 'south'; % places legend below all plots
 
 set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 44]) % or [left bottom width height]
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 44])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/MHEreal/MHE_vs_KF_vel_'+string(N_MHE), '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/MHEreal/MHE_vs_KF_vel', '-dpdf', '-vector', '-fillpage');
 
 
 %%

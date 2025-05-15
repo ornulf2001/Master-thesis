@@ -1,0 +1,416 @@
+clc,clear
+%addpath(genpath("3D model"))
+addpath(genpath('3D model reduced order_fixed'))
+addpath(genpath('../qpOASES/interfaces/matlab'))
+
+
+% Define system parameters
+params = parameters1;
+params_adjusted = parameters1_adjusted;
+
+% Find equilibrium point
+index = @(A,i) A(i);
+fz = @(z) index(f([0,0,z,zeros(1,7)]', [0,0,0,0]', params), 8);  
+zeq =  fzero(fz,0.1);
+
+xeq = [0, 0, zeq, zeros(1,7)]';
+ueq = [0,0,0,0]';
+
+% Linearize model
+xlp = xeq;   
+ulp = ueq;
+
+% States: [ x y z phi theta xdot ydot zdot phidot thetadot ]
+[Ac, Bc, C] = linearizeModel(@f, @h, xlp, ulp, params);
+[Ac2, Bc2, C2] = linearizeModel(@f, @h, xlp, ulp, params_adjusted);
+
+nStates = size(Ac, 1);
+nControls = size(Bc, 2);
+nMeasurements = size(C, 1);
+
+%% Tuning
+xRef = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0];
+X0 = [0.003; 0.003; zeq+0.002; 0; 0; 0; 0; 0; 0; 0;];
+MHE_x0 = zeros(nStates,1);
+t = 1;
+
+N_MHE = 15;
+N_MPC = 10;
+dt = 0.003;
+NT = ceil(t/dt);
+tvec = 0:1:NT-1;
+tvec2=0:dt:t+dt;
+
+%MHE tuning
+alpha = 0.9;
+noise_std = 0.1 * 1e-3; %0.1 mT
+R_MHE = inv(noise_std^2 * eye(nMeasurements));  
+Q_MHE=1e6*diag([1,1,1,1,1,5,5,5,5,5]); 
+Qscaling = 5e3; 
+    %Start out with low Q during start up, then increase Q after N_MHE+1. 
+    %See below in loop
+
+%Arrival cost weight initial guess (updates KF-style in loop)
+M_MHE = 1e0*diag([5,5,5,1,1,1,1,1,1,1]);
+P0 = inv(M_MHE); % Arrival cost cov initial guess.
+weightScaling = 1e-4; %Scaling factor for better posing of QP
+
+%MPC and LQR tuning
+Q_MPC = diag([1500 1000 2000 10 10 1 1 10 1 1]);
+R_MPC = diag([0.2, 0.2, 0.2, 0.2]);
+
+Q_LQR = diag([ ...
+   1e1,1e1,1e1,1e1,1e1, ...
+   1e1,1e1,1e5,1e1,1e1
+   ]);
+R_LQR = 1e2 * eye(4);
+
+% Bounds
+run("mpc_bounds.m") %currently inf all over
+
+
+
+%% Run
+
+%MHE_options = qpOASES_options();
+MHE_options = optimset('Display','off', 'Diagnostics','off', ...
+        'Algorithm', 'active-set');
+mhe = MHEclass(N_MHE, Ac, Bc, C, Q_MHE, R_MHE, M_MHE, weightScaling, ...
+        MHE_x0, xlp, P0, dt, MHE_options);
+
+MPC_options = optimset('Display', 'off', 'Diagnostics', 'off', ...
+        'Algorithm', 'active-set');
+mpc = MPCclass(N_MPC, Ac, Bc, X0, dt, [], [], Q_MPC, R_MPC, ...
+        nStates, nControls, MPC_options, xRef, [], []);
+
+%Init
+X_sim = zeros(nStates, NT);
+X_sim_gt = zeros(nStates, NT);
+U_sim = zeros(nControls, NT-1);
+U_sim_gt=zeros(nControls, NT-1);
+vsol = zeros(nMeasurements, NT);
+wsol = zeros(nMeasurements, NT-1);
+MHE_est = zeros(nStates, NT);
+MHE_est(:,1) = mhe.x0; 
+xEst = mhe.x0;
+yNext = zeros(nMeasurements, NT);  
+yNext(:,1) = C * (X0-xlp);
+yNext_f = zeros(nMeasurements, NT);
+yNext_f(:,1) = C * (X0-xlp);
+NIS_traj = zeros(NT-1, 1);
+NEES_traj = zeros(NT-1, 1);
+Innovations_traj = zeros(nMeasurements, NT-1);
+newY = yNext(:,1);
+xNext = X0;
+X_sim(:, 1) = X0;
+X_sim_gt(:, 1) = X0;
+tspan = [0, dt];
+controllModeVec = zeros(1,NT);
+toterror=0;
+
+% Calculating the reference input for stabilizing in the reference point
+uRef = mpc.computeReferenceInput(); 
+
+iterCounter = 1;
+switchCounter = 0;
+switchThreshold = 10;
+NIS_current = mhe.nMeasurements;
+RunningFlag = true;
+
+dof_NIS = mhe.nMeasurements; % degrees of freedom (number of measurements)
+alpha_NIS = 0.05;  % 95% confidence = 1 - alpha
+lowerBound_NIS = chi2inv(alpha_NIS / 2, dof_NIS);
+upperBound_NIS = chi2inv(1 - alpha_NIS / 2, dof_NIS);
+useAdvancedControl = false;
+
+[K_lqr,~,~] = dlqr(mpc.A, mpc.B, Q_LQR, R_LQR);
+
+profile clear
+profile on
+
+% Current switching logic: 
+%   If NIS is inside bounds: increase switchCounter, if Nis exits bounds: reduce switchCounter. 
+%   Whenever switchCounter > switchThreshold: use advanced control, else use LQR.
+%   This hopefully leads to a smoother transition between control types.
+while RunningFlag == true && iterCounter <= (NT)
+    t_start = tic;
+    k = iterCounter;
+    iterCounter = iterCounter + 1;
+    
+
+    if (NIS_current) >= lowerBound_NIS && (NIS_current <= upperBound_NIS)
+        switchCounter = switchCounter + 1;
+        if switchCounter > 2 * switchThreshold
+            switchCounter = 2 * switchThreshold;
+        end
+    else
+        switchCounter = switchCounter - 3;
+        if switchCounter < 0
+            switchCounter = 0;
+        end
+    end
+
+    if switchCounter > switchThreshold
+        useAdvancedControl = true;
+    else
+        useAdvancedControl = false;
+    end
+    
+    disp(string(k) + ", Running with advanced control: " + ...
+            string(useAdvancedControl))
+
+
+    if iterCounter == mhe.N + 2
+        mhe.Q = Qscaling * mhe.Q;
+        mhe.G(mhe.nStates * (mhe.N+1) + 1 : mhe.nStates * (mhe.N+1) + ...
+                mhe.nStates * mhe.N, mhe.nStates * (mhe.N+1) + 1 : ...
+                mhe.nStates * (mhe.N+1) + mhe.nStates * mhe.N ) = ...
+                kron(eye(mhe.N), mhe.weightScaling * mhe.Q);
+        % Here we increase Q after N_MHE+1 iterations when the MHE has calibrated. 
+        % This seems to improve performance?
+    end
+
+
+    % Controller mode:
+    %   use controllerMode = X_sim(:,k) or xEst for running MHE on true state or MHE estimates
+    controllerMode = xEst; if controllerMode ==xEst; controllerModePrint="xEst"; elseif controllerMode == X_sim(:,k); controllerModePrint="Xsim";end
+
+    if useAdvancedControl
+        [~, Uopt] = mpc.runMPC(controllerMode);
+        [~, Uopt_gt] = mpc.runMPC(X_sim_gt(:,k));
+        U = Uopt;
+        U_gt = Uopt_gt;
+        controllModeVec(k) = 1;
+    else
+        U_LQR = -K_lqr * controllerMode;
+        U_LQR_gt = -K_lqr * X_sim_gt(:,k);
+        U = U_LQR;
+        U_gt = U_LQR_gt;
+    end
+        
+
+
+    %[~, X] = ode15s(@(t, x) f(x, U, params), tspan, X_sim(:,k));
+    %X_sim(:, k+1) = X(end, :)'; 
+    X_sim(:, k+1) = RK4Step(@f, X_sim(:,k), U, dt, params);
+    X_sim_gt(:, k+1) = RK4Step(@f, X_sim_gt(:,k), U_gt, dt, params);
+    U_sim(:, k) = U; 
+    U_sim_gt(:,k)=U_gt;
+    newU = U_sim(:, k); %For MHE input
+
+    noise = noise_std * randn([nMeasurements, 1]);
+    yNext(:, k+1) = C * X_sim(:, k+1) - C * xlp + noise; 
+    yNext_f(:, k+1) = alpha * yNext(:, k+1) + (1-alpha) * yNext_f(:, k); %EMA
+    newY = yNext_f(:, k+1); %For MHE input
+    mhe = mhe.runMHE(newY, newU); %Run MHE with newY and newU
+    xEst = mhe.xCurrent; % Extract xhat
+    MHE_est(:, k+1) = xEst;
+    vsol(:, k+1) = mhe.vCurrent;
+    wsol(:, k+1) = mhe.vCurrent;
+
+
+    NIS_current = mhe.currentNIS;
+    NIS_traj(k) = NIS_current;
+    Innovations_traj(:,k) = mhe.currentInnovation;
+    error = xEst - (X_sim(:, k+1) - xlp);
+    toterror = toterror + vecnorm(error,2);
+    NEES_traj(k) = error' / mhe.currentP * error;
+
+    %profile viewer
+    elapsed = toc(t_start)
+end
+
+%% Plot
+% Shared settings
+set(groot, 'defaultTextInterpreter','latex');
+set(groot, 'defaultAxesTickLabelInterpreter','latex');
+set(groot, 'defaultLegendInterpreter','latex');
+fontSize = 22;
+labelFontSize = 22;
+lineWidth = 3;
+color2=[0.729, 0.098, 0.851];
+shadecolor=[0.682, 0.847, 1];
+
+figure(51); clf
+t=tiledlayout(5,1,'TileSpacing', 'compact', 'Padding', 'compact');
+sgtitle('$\textbf{GT simulation vs. MHE-based simulation}$','interpreter','latex','FontSize', labelFontSize-10)
+
+nexttile
+plot(tvec2, X_sim_gt(1,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec2, X_sim(1,:), 'color',color2, 'lineStyle','-.', 'LineWidth', lineWidth);
+title('\textit{Position and orientation}','interpreter','latex','FontSize', labelFontSize-2)
+set(gca, 'XTickLabel', [], 'FontSize', fontSize);
+ylabel('$x$ [m]', 'Interpreter','latex', 'FontSize', labelFontSize);
+yl = get(gca, 'YLim');ylim(yl)
+shadeMPCregions(tvec2, controllModeVec,yl,shadecolor);
+axis tight
+%legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
+
+nexttile
+plot(tvec2, X_sim_gt(2,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec2, X_sim(2,:), 'color',color2, 'lineStyle','-.','LineWidth', lineWidth);
+set(gca, 'XTickLabel', [], 'FontSize', fontSize);
+ylabel('$y$ [m]', 'Interpreter','latex', 'FontSize', labelFontSize);
+yl = get(gca, 'YLim');ylim(yl)
+shadeMPCregions(tvec2, controllModeVec,yl,shadecolor);
+axis tight
+
+%legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
+
+nexttile
+plot(tvec2, X_sim_gt(3,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec2, X_sim(3,:), 'color',color2, 'lineStyle','-.', 'LineWidth', lineWidth);
+%yline(zeq, 'k-.', 'LineWidth', lineWidth);
+set(gca, 'XTickLabel', [], 'FontSize', fontSize);
+ylabel('$z$ [m]', 'Interpreter','latex', 'FontSize', labelFontSize);
+yl = get(gca, 'YLim');ylim(yl)
+shadeMPCregions(tvec2, controllModeVec,yl,shadecolor);
+axis tight
+
+
+
+nexttile
+plot(tvec2,X_sim_gt(4,:), "r-", 'LineWidth',lineWidth); hold on; grid on;
+plot(tvec2,X_sim(4,:), 'color',color2, 'lineStyle','-.','LineWidth',lineWidth)
+set(gca, 'XTickLabel', [], 'FontSize', fontSize);
+ylabel("$\alpha$ [rad]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
+yl = get(gca, 'YLim');ylim(yl)
+shadeMPCregions(tvec2,controllModeVec,yl,shadecolor)
+%legend({'GT','MHE-based', 'MPC active'}, 'Interpreter', 'latex', 'FontSize', fontSize, 'location', 'northeast')
+axis tight
+
+nexttile
+plot(tvec2,X_sim_gt(5,:), "r-", 'LineWidth',lineWidth); hold on; grid on;
+plot(tvec2,X_sim(5,:), 'color',color2, 'lineStyle','-.','LineWidth',lineWidth)
+set(gca,'FontSize', fontSize);
+ylabel("$\beta$ [rad]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
+%xlabel("Iterations", 'Interpreter','latex', 'FontSize', labelFontSize)
+yl = get(gca, 'YLim');ylim(yl)
+shadeMPCregions(tvec2,controllModeVec,yl,shadecolor)
+xlabel('Time [s]', 'Interpreter','latex', 'FontSize', labelFontSize);
+%legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
+axis tight
+
+l = legend(t.Children(end), {'GT','MHE-based','MPC active'}, 'Orientation', 'horizontal', 'Interpreter','latex', 'FontSize', fontSize);
+l.Layout.Tile = 'south'; % places legend below all plots
+
+set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 44]) % or [left bottom width height]
+set(gcf, 'PaperUnits', 'centimeters')
+set(gcf, 'PaperSize', [41 44])
+set(gcf, 'PaperPositionMode', 'manual')
+print(gcf, 'Figures/controller_performance/plot_'+controllerModePrint+'_combination', '-dpdf', '-vector', '-fillpage');
+
+%%
+
+figure(53); clf
+
+% --- Subplot 1: x ---
+t=tiledlayout(3,1);
+sgtitle('$\shortstack{GT simulation vs. MHE-based simulation \\ Velocity}$','interpreter','latex', 'FontSize', labelFontSize+2)
+
+nexttile
+plot(tvec, X_sim_gt(6,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec, X_sim(6,:), 'b--', 'LineWidth', lineWidth);
+set(gca,  'XTickLabel', [],'FontSize', fontSize);
+ylabel('$\dot{x}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
+yl = get(gca, 'YLim');ylim(yl)
+shadeMPCregions(tvec, controllModeVec,yl,shadecolor);
+legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
+
+% --- Subplot 2: y ---
+nexttile
+plot(tvec, X_sim_gt(7,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec, X_sim(7,:), 'b--', 'LineWidth', lineWidth);
+set(gca, 'XTickLabel', [], 'FontSize', fontSize);
+ylabel('$\dot{y}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
+shadeMPCregions(tvec, controllModeVec,yl,shadecolor);
+yl = get(gca, 'YLim');ylim(yl)
+%legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
+
+% --- Subplot 3: z ---
+nexttile
+plot(tvec, X_sim_gt(8,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
+plot(tvec, X_sim(8,:), 'b--', 'LineWidth', lineWidth);
+set(gca, 'FontSize', fontSize);
+ylabel('$\dot{z}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
+xlabel('Iterations', 'Interpreter','latex', 'FontSize', labelFontSize);
+yl = get(gca, 'YLim');ylim(yl)
+shadeMPCregions(tvec, controllModeVec,yl,shadecolor);
+%legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
+
+% --- Export ---
+print(gcf, 'Figures/controller_performance/plot_'+controllerModePrint+'_Velocity', '-dpdf', '-vector');
+
+
+
+
+figure(54)
+clf
+t=tiledlayout(2,1);
+sgtitle("$\shortstack{GT simulation vs. MHE-based simulation \\ Angular velocity}$",'interpreter','latex', 'FontSize',labelFontSize+2)
+
+nexttile
+plot(tvec,X_sim_gt(9,:), "r-", 'LineWidth',lineWidth); hold on; grid on;
+plot(tvec,X_sim(9,:), "b--",'LineWidth',lineWidth)
+set(gca,  'FontSize', fontSize);
+ylabel("$\dot{\alpha}$ [rad/s]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
+yl = get(gca, 'YLim');ylim(yl)
+shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
+legend({'GT','MHE-based', 'MPC active'}, 'Interpreter', 'latex', 'FontSize', fontSize, 'location', 'northeast')
+
+nexttile
+plot(tvec,X_sim_gt(10,:), "r-", 'LineWidth',lineWidth); hold on; grid on;
+plot(tvec,X_sim(10,:), "b--",'LineWidth',lineWidth)
+set(gca,  'FontSize', fontSize);
+ylabel("$\dot{\beta}$ [rad/s]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
+xlabel("Iterations", 'Interpreter','latex', 'FontSize', labelFontSize)
+yl = get(gca, 'YLim');ylim(yl)
+shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
+%legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
+print(gcf, 'Figures/controller_performance/plot_'+controllerModePrint+'_AngularVelocity', '-dpdf', '-vector');
+
+
+
+
+%%
+figure(100);clf
+plot(tvec(1:end-1),U_sim(:,:), 'LineWidth', lineWidth); hold on
+set(gca,  'FontSize', fontSize);
+ylabel("Solenoid current [A]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
+xlabel("Iterations", 'Interpreter','latex', 'FontSize', labelFontSize)
+title("Control inputs for MHE-based simulation", 'FontSize',labelFontSize+2)
+yl = get(gca, 'YLim');ylim(yl)
+shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
+legend({"$u_{x,p}$","$u_{y,p}$","$u_{x,n}$","$u_{y,n}$","MPC active"}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast')
+print(gcf, 'Figures/controller_performance/plot_'+controllerModePrint+'_ControlInputs', '-dpdf', '-vector');
+
+% %Zoom-in box (Manually located)
+% axInset = axes('Position', [0.3, 0.55, 0.25, 0.25]);  % [x y width height]
+% box on;
+% plot(tvec(1:end-1), U_sim(:,:), 'LineWidth', lineWidth);
+% yl = get(gca, 'YLim');ylim(yl)
+% shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
+% xlim([25, 55]);   % zoomed x-range
+% ylim([-0.8, 1.2]);   % zoomed y-range
+% set(axInset, 'FontSize', 10);
+% 
+% % Draw connecting lines (normalized coordinates)
+% annotation('line', [0.3 0.21], [0.55 0.42], 'LineStyle', '--');
+% annotation('line', [0.3+0.25  0.21], [0.55 0.42], 'LineStyle', '--');
+
+
+
+%%
+
+function gamma = gamma_f(k,fade_period) %Not in use, old fading factor [0,1] to switch from LQR to MPC
+    gamma = (k-fade_period(1))/(fade_period(end)-fade_period(1));
+end
+
+function x_next = RK4Step(f,x,U,dt,params)
+    k1 = f(x,U,params);
+    k2 = f(x+0.5*dt*k1,U,params);
+    k3 = f(x+0.5*dt*k2,U,params);
+    k4 = f(x + dt*k3, U, params);
+
+    x_next = x+(dt/6)*(k1+2*k2+2*k3+k4);
+end

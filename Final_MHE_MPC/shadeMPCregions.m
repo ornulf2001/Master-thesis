@@ -1,4 +1,4 @@
-function shadeMPCregions(t, controllerMode,yl)
+function shadeMPCregions(t, controllerMode,yl,shadecolor)
     % Adds shaded patches to indicate MPC-active regions on current plot
     wasMPC = false;
 
@@ -10,7 +10,7 @@ function shadeMPCregions(t, controllerMode,yl)
             endIdx = i - 1;
             patch([t(startIdx), t(endIdx), t(endIdx), t(startIdx)], ...
                   [yl(1), yl(1), yl(2), yl(2)], ...
-                  [0.8 0.8 1], 'FaceAlpha', 0.3, 'EdgeColor', 'none');
+                  shadecolor, 'FaceAlpha', 0.3, 'EdgeColor', 'none');
             wasMPC = false;
         end
     end
@@ -20,6 +20,6 @@ function shadeMPCregions(t, controllerMode,yl)
         endIdx = length(t);
         patch([t(startIdx), t(endIdx), t(endIdx), t(startIdx)], ...
               [yl(1), yl(1), yl(2), yl(2)], ...
-              [0.8 0.8 1], 'FaceAlpha', 0.3, 'EdgeColor', 'none');
+              shadecolor, 'FaceAlpha', 0.3, 'EdgeColor', 'none');
     end
 end
