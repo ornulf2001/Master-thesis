@@ -38,7 +38,7 @@ N_MHE = 15;
 N_MPC = 10;
 dt = 0.003;
 NT = ceil(t/dt);
-tvec = 0:1:NT-1;
+tvec = dt*(0:1:NT-1);
 tvec2=0:dt:t+dt;
 
 %MHE tuning
@@ -298,91 +298,183 @@ set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 44]) % or [left bottom widt
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 44])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/controller_performance/plot_'+controllerModePrint+'_combination', '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/controller_performance/plot_'+controllerModePrint+'_combination2', '-dpdf', '-vector', '-fillpage');
 
 %%
 
-figure(53); clf
-
-% --- Subplot 1: x ---
-t=tiledlayout(3,1);
-sgtitle('$\shortstack{GT simulation vs. MHE-based simulation \\ Velocity}$','interpreter','latex', 'FontSize', labelFontSize+2)
-
-nexttile
-plot(tvec, X_sim_gt(6,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
-plot(tvec, X_sim(6,:), 'b--', 'LineWidth', lineWidth);
-set(gca,  'XTickLabel', [],'FontSize', fontSize);
-ylabel('$\dot{x}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
-yl = get(gca, 'YLim');ylim(yl)
-shadeMPCregions(tvec, controllModeVec,yl,shadecolor);
-legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
-
-% --- Subplot 2: y ---
-nexttile
-plot(tvec, X_sim_gt(7,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
-plot(tvec, X_sim(7,:), 'b--', 'LineWidth', lineWidth);
-set(gca, 'XTickLabel', [], 'FontSize', fontSize);
-ylabel('$\dot{y}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
-shadeMPCregions(tvec, controllModeVec,yl,shadecolor);
-yl = get(gca, 'YLim');ylim(yl)
-%legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
-
-% --- Subplot 3: z ---
-nexttile
-plot(tvec, X_sim_gt(8,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
-plot(tvec, X_sim(8,:), 'b--', 'LineWidth', lineWidth);
-set(gca, 'FontSize', fontSize);
-ylabel('$\dot{z}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
-xlabel('Iterations', 'Interpreter','latex', 'FontSize', labelFontSize);
-yl = get(gca, 'YLim');ylim(yl)
-shadeMPCregions(tvec, controllModeVec,yl,shadecolor);
-%legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
-
-% --- Export ---
-print(gcf, 'Figures/controller_performance/plot_'+controllerModePrint+'_Velocity', '-dpdf', '-vector');
-
-
-
-
-figure(54)
-clf
-t=tiledlayout(2,1);
-sgtitle("$\shortstack{GT simulation vs. MHE-based simulation \\ Angular velocity}$",'interpreter','latex', 'FontSize',labelFontSize+2)
-
-nexttile
-plot(tvec,X_sim_gt(9,:), "r-", 'LineWidth',lineWidth); hold on; grid on;
-plot(tvec,X_sim(9,:), "b--",'LineWidth',lineWidth)
-set(gca,  'FontSize', fontSize);
-ylabel("$\dot{\alpha}$ [rad/s]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
-yl = get(gca, 'YLim');ylim(yl)
-shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
-legend({'GT','MHE-based', 'MPC active'}, 'Interpreter', 'latex', 'FontSize', fontSize, 'location', 'northeast')
-
-nexttile
-plot(tvec,X_sim_gt(10,:), "r-", 'LineWidth',lineWidth); hold on; grid on;
-plot(tvec,X_sim(10,:), "b--",'LineWidth',lineWidth)
-set(gca,  'FontSize', fontSize);
-ylabel("$\dot{\beta}$ [rad/s]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
-xlabel("Iterations", 'Interpreter','latex', 'FontSize', labelFontSize)
-yl = get(gca, 'YLim');ylim(yl)
-shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
-%legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
-print(gcf, 'Figures/controller_performance/plot_'+controllerModePrint+'_AngularVelocity', '-dpdf', '-vector');
+% figure(53); clf
+% 
+% % --- Subplot 1: x ---
+% t=tiledlayout(3,1);
+% sgtitle('$\shortstack{GT simulation vs. MHE-based simulation \\ Velocity}$','interpreter','latex', 'FontSize', labelFontSize+2)
+% 
+% nexttile
+% plot(tvec2, X_sim_gt(6,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
+% plot(tvec2, X_sim(6,:), 'b--', 'LineWidth', lineWidth);
+% set(gca,  'XTickLabel', [],'FontSize', fontSize);
+% ylabel('$\dot{x}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
+% yl = get(gca, 'YLim');ylim(yl)
+% shadeMPCregions(tvec, controllModeVec,yl,shadecolor);
+% legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
+% 
+% % --- Subplot 2: y ---
+% nexttile
+% plot(tvec2, X_sim_gt(7,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
+% plot(tvec2, X_sim(7,:), 'b--', 'LineWidth', lineWidth);
+% set(gca, 'XTickLabel', [], 'FontSize', fontSize);
+% ylabel('$\dot{y}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
+% shadeMPCregions(tvec, controllModeVec,yl,shadecolor);
+% yl = get(gca, 'YLim');ylim(yl)
+% %legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
+% 
+% % --- Subplot 3: z ---
+% nexttile
+% plot(tvec2, X_sim_gt(8,:), 'r-', 'LineWidth', lineWidth); hold on; grid on;
+% plot(tvec2, X_sim(8,:), 'b--', 'LineWidth', lineWidth);
+% set(gca, 'FontSize', fontSize);
+% ylabel('$\dot{z}$ [m/s]', 'Interpreter','latex', 'FontSize', labelFontSize);
+% xlabel('Iterations', 'Interpreter','latex', 'FontSize', labelFontSize);
+% yl = get(gca, 'YLim');ylim(yl)
+% shadeMPCregions(tvec, controllModeVec,yl,shadecolor);
+% %legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
+% 
+% % --- Export ---
+% print(gcf, 'Figures/controller_performance/plot_'+controllerModePrint+'_Velocity2', '-dpdf', '-vector');
+% 
+% 
+% 
+% 
+% figure(54)
+% clf
+% t=tiledlayout(2,1);
+% sgtitle("$\shortstack{GT simulation vs. MHE-based simulation \\ Angular velocity}$",'interpreter','latex', 'FontSize',labelFontSize+2)
+% 
+% nexttile
+% plot(tvec2,X_sim_gt(9,:), "r-", 'LineWidth',lineWidth); hold on; grid on;
+% plot(tvec2,X_sim(9,:), "b--",'LineWidth',lineWidth)
+% set(gca,  'FontSize', fontSize);
+% ylabel("$\dot{\alpha}$ [rad/s]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
+% yl = get(gca, 'YLim');ylim(yl)
+% shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
+% legend({'GT','MHE-based', 'MPC active'}, 'Interpreter', 'latex', 'FontSize', fontSize, 'location', 'northeast')
+% 
+% nexttile
+% plot(tvec2,X_sim_gt(10,:), "r-", 'LineWidth',lineWidth); hold on; grid on;
+% plot(tvec2,X_sim(10,:), "b--",'LineWidth',lineWidth)
+% set(gca,  'FontSize', fontSize);
+% ylabel("$\dot{\beta}$ [rad/s]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
+% xlabel("Iterations", 'Interpreter','latex', 'FontSize', labelFontSize)
+% yl = get(gca, 'YLim');ylim(yl)
+% shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
+% %legend({'GT','MHE-based', 'MPC active'}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast');
+% print(gcf, 'Figures/controller_performance/plot_'+controllerModePrint+'_AngularVelocity', '-dpdf', '-vector');
 
 
 
 
 %%
-figure(100);clf
-plot(tvec(1:end-1),U_sim(:,:), 'LineWidth', lineWidth); hold on
+
+
+
+
+
+set(groot, 'defaultTextInterpreter','latex');
+set(groot, 'defaultAxesTickLabelInterpreter','latex');
+set(groot, 'defaultLegendInterpreter','latex');
+fontSize = 23;
+labelFontSize = 23;
+lineWidth = 3;
+color1=[0.85, 0.33, 0.1];
+shadecolor=[0.682, 0.847, 1];
+
+color2='blue';
+
+figure(200);clf
+t=tiledlayout(1,1,'TileSpacing', 'compact', 'Padding', 'compact');
+titleStr = '$\textbf{Control inputs for MHE-based simulation}$';
+sgtitle(titleStr, 'Interpreter', 'latex', 'FontSize', labelFontSize);
+
+nexttile
+plot(tvec,U_sim(:,:), 'LineWidth', lineWidth); hold on
 set(gca,  'FontSize', fontSize);
 ylabel("Solenoid current [A]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
-xlabel("Iterations", 'Interpreter','latex', 'FontSize', labelFontSize)
-title("Control inputs for MHE-based simulation", 'FontSize',labelFontSize+2)
+xlabel("Time [s]", 'Interpreter','latex', 'FontSize', labelFontSize)
+%title("Control input", 'FontSize',labelFontSize+2)
 yl = get(gca, 'YLim');ylim(yl)
 shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
 legend({"$u_{x,p}$","$u_{y,p}$","$u_{x,n}$","$u_{y,n}$","MPC active"}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast')
-print(gcf, 'Figures/controller_performance/plot_'+controllerModePrint+'_ControlInputs', '-dpdf', '-vector');
+
+set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 20]) % or [left bottom width height]
+set(gcf, 'PaperUnits', 'centimeters')
+set(gcf, 'PaperSize', [41 20])
+set(gcf, 'PaperPositionMode', 'manual')
+print(gcf, 'Figures/controller_performance/plot_'+controllerModePrint+'_control', '-dpdf', '-vector', '-fillpage');
+
+figure(201);clf
+t=tiledlayout(1,1,'TileSpacing', 'compact', 'Padding', 'compact');
+titleStr = '$\textbf{Control inputs for GT simulation}$';
+sgtitle(titleStr, 'Interpreter', 'latex', 'FontSize', labelFontSize);
+
+nexttile
+plot(tvec,U_sim_gt(:,:), 'LineWidth', lineWidth); hold on
+set(gca,  'FontSize', fontSize);
+ylabel("Solenoid current [A]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
+xlabel("Time [s]", 'Interpreter','latex', 'FontSize', labelFontSize)
+%title("Control input", 'FontSize',labelFontSize+2)
+yl = get(gca, 'YLim');ylim(yl)
+shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
+legend({"$u_{x,p}$","$u_{y,p}$","$u_{x,n}$","$u_{y,n}$","MPC active"}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast')
+
+set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 20]) % or [left bottom width height]
+set(gcf, 'PaperUnits', 'centimeters')
+set(gcf, 'PaperSize', [41 20])
+set(gcf, 'PaperPositionMode', 'manual')
+print(gcf, 'Figures/controller_performance/plot_GT_control', '-dpdf', '-vector', '-fillpage');
+
+
+%Zoom-in box (Manually located)
+% axInset = axes('Position', [0.3, 0.25, 0.1, 0.5]);  % [x y width height]
+% box on;
+% plot(tvec, U_sim(:,:), 'LineWidth', lineWidth);
+% yl = get(gca, 'YLim');ylim(yl)
+% shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
+% xlim([0.1, 0.2]);   % zoomed x-range
+% ylim([-6, 1]);   % zoomed y-range
+% set(axInset, 'FontSize', 10);
+% 
+% % Draw connecting lines (normalized coordinates)
+% annotation('line', [0.3 0.225], [0.50 0.65], 'LineStyle', '--');
+% annotation('line', [0.3  0.225], [0.75 0.65], 'LineStyle', '--');
+% 
+% set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 20]) % or [left bottom width height]
+% set(gcf, 'PaperUnits', 'centimeters')
+% set(gcf, 'PaperSize', [41 20])
+% set(gcf, 'PaperPositionMode', 'manual')
+% print(gcf, 'Figures/estimation_error/plot_'+controllerModePrint+'_control', '-dpdf', '-vector', '-fillpage');
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+% figure(100);clf
+% plot(tvec(1:end-1),U_sim(:,:), 'LineWidth', lineWidth); hold on
+% set(gca,  'FontSize', fontSize);
+% ylabel("Solenoid current [A]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
+% xlabel("Iterations", 'Interpreter','latex', 'FontSize', labelFontSize)
+% title("Control inputs for MHE-based simulation", 'FontSize',labelFontSize+2)
+% yl = get(gca, 'YLim');ylim(yl)
+% shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
+% legend({"$u_{x,p}$","$u_{y,p}$","$u_{x,n}$","$u_{y,n}$","MPC active"}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast')
+% print(gcf, 'Figures/controller_performance/plot_'+controllerModePrint+'_ControlInputs', '-dpdf', '-vector');
 
 % %Zoom-in box (Manually located)
 % axInset = axes('Position', [0.3, 0.55, 0.25, 0.25]);  % [x y width height]

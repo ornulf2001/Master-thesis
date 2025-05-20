@@ -2,7 +2,7 @@ clc, clear
 addpath(genpath('3D model reduced order_fixed'))
 
 N = 10:2:14;           % Range of N
-dt = 0.003;%0.001:0.001:0.003;          % Range of dt (can be vector later)
+dt =0.001:0.001:0.003;          % Range of dt (can be vector later)
 
 [NGrid, dtGrid] = meshgrid(N, dt);
 [nDt, nN] = size(NGrid);
@@ -90,7 +90,7 @@ catch
     ylabel('RMSE');
 
     yyaxis right
-    plot(N,mean(squeeze(runtimes),2))
+    plot(N,mean(runtimes,1))
     ylabel("runtimes")
     xlabel('Horizon Length N');
     title('Plot of RMSE vs. N');
@@ -128,7 +128,7 @@ for i = 1:length(sim_idx_N)
 end
 sim_mean = mean(sims, 4);  % [1, NT]
 figure(2);clf
-plot(sim_mean(3,:,3),LineWidth=2);hold on
+plot(sim_mean(3,:,find(dtGrid(:)==dt(end) & ,LineWidth=2);hold on
 yline(zeq)
 legends=[];
 for i=1:size(z_mean_by_N,1)
@@ -187,7 +187,7 @@ function [sim,est]=runSystem(N,dt,NT, X0, MHE_x0,zeq)
     
     %MPC and LQR tuning
     Q_MPC = diag([500 500 2000 10 10 1 1 10 1 1]);
-    R_MPC = diag([0.2, 0.2, 0.2, 0.2]);
+    R_MPC = diag([2, 2, 2, 2]);
     
     Q_LQR = diag([ ...
        1e1,1e1,1e1,1e1,1e1, ...
@@ -210,6 +210,7 @@ function [sim,est]=runSystem(N,dt,NT, X0, MHE_x0,zeq)
             'Algorithm', 'active-set');
     mpc = MPCclass(N_MPC, Ac, Bc, X0, dt, [], [], Q_MPC, R_MPC, ...
             nStates, nControls, MPC_options, xRef, [], []);
+    
     %Init
     X_sim = zeros(nStates, NT);
     U_sim = zeros(nControls, NT-1);
@@ -276,7 +277,7 @@ function [sim,est]=runSystem(N,dt,NT, X0, MHE_x0,zeq)
         if switchCounter > switchThreshold
             useAdvancedControl = true;
         else
-            useAdvancedControl = true;
+            useAdvancedControl = false;
         end
         
         %disp(string(k) + ", Running with advanced control: " + ...

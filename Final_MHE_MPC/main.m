@@ -45,7 +45,7 @@ tvec2=0:dt:t+dt;
 alpha = 0.9;
 noise_std = 0.1 * 1e-3; %0.1 mT
 R_MHE = inv(noise_std^2 * eye(nMeasurements));  
-Q_MHE=1e6*diag([1,1,1,1,1,5,5,5,5,5]); 
+Q_MHE=1e5*diag([1,1,1,1,1,5,5,5,5,5]); 
 Qscaling = 5e3;
     %Start out with low Q during start up, then increase Q after N_MHE+1. 
     %See below in loop
@@ -75,7 +75,7 @@ run("mpc_bounds.m") %currently inf all over
 %MHE_options = qpOASES_options();
 MHE_options = optimset('Display','off', 'Diagnostics','off', ...
         'Algorithm', 'active-set');
-mhe = MHEclass(N_MHE, Ac, Bc, C, Q_MHE, R_MHE, M_MHE, weightScaling, ...
+mhe = MHEclass(N_MHE, Ac2, Bc2, C2, Q_MHE, R_MHE, M_MHE, weightScaling, ...
         MHE_x0, xlp, P0, dt, MHE_options);
 
 MPC_options = optimset('Display', 'off', 'Diagnostics', 'off', ...
@@ -294,7 +294,7 @@ set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 44]) % or [left bottom widt
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 44])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/estimation_error/plot_'+controllerModePrint+'_combination', '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/model_mismatch/plot_'+controllerModePrint+'_combination', '-dpdf', '-vector', '-fillpage');
 
 %%
 set(groot, 'defaultTextInterpreter','latex');
@@ -374,7 +374,7 @@ set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 44]) % or [left bottom widt
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 44])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/estimation_error/plot_'+controllerModePrint+'_combination_vel', '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/model_mismatch//plot_'+controllerModePrint+'_combination_vel', '-dpdf', '-vector', '-fillpage');
 
 
 %% plot meas
@@ -425,7 +425,7 @@ set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 25]) % or [left bottom widt
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 25])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/estimation_error/plot_'+controllerModePrint+'_EstMeas1', '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/model_mismatch//plot_'+controllerModePrint+'_EstMeas1', '-dpdf', '-vector', '-fillpage');
 
 figure(6);clf
 t=tiledlayout(3,1,'TileSpacing', 'compact', 'Padding', 'compact');
@@ -461,7 +461,7 @@ set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 25]) % or [left bottom widt
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 25])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/estimation_error/plot_'+controllerModePrint+'_EstMeas2', '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/model_mismatch//plot_'+controllerModePrint+'_EstMeas2', '-dpdf', '-vector', '-fillpage');
 
 figure(7);clf
 t=tiledlayout(3,1,'TileSpacing', 'compact', 'Padding', 'compact');
@@ -497,7 +497,7 @@ set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 25]) % or [left bottom widt
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 25])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/estimation_error/plot_'+controllerModePrint+'_EstMeas3', '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/model_mismatch//plot_'+controllerModePrint+'_EstMeas3', '-dpdf', '-vector', '-fillpage');
 
 
 
@@ -549,7 +549,7 @@ set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 20]) % or [left bottom widt
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 20])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/estimation_error/plot_'+controllerModePrint+'_NIS', '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/model_mismatch//plot_'+controllerModePrint+'_NIS', '-dpdf', '-vector', '-fillpage');
 
 %% Plot NEES chi2 
 set(groot, 'defaultTextInterpreter','latex');
@@ -600,7 +600,7 @@ set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 20]) % or [left bottom widt
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 20])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/estimation_error/plot_'+controllerModePrint+'_NEES', '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/model_mismatch//plot_'+controllerModePrint+'_NEES', '-dpdf', '-vector', '-fillpage');
 
 % dof_NEES = mhe.nStates;       % degrees of freedom (number of measurements)
 % alpha_NEES = 0.05;  % 95% confidence = 1 - alpha
@@ -656,7 +656,7 @@ for innov_var=1:nMeasurements
         set(gcf, 'PaperUnits', 'centimeters')
         set(gcf, 'PaperSize', [41 20])
         set(gcf, 'PaperPositionMode', 'manual')
-        print(gcf, 'Figures/estimation_error/plot_'+controllerModePrint+'_ACF'+string(innov_var),'-dpdf', '-vector', '-fillpage');
+        print(gcf, 'Figures/model_mismatch//plot_'+controllerModePrint+'_ACF'+string(innov_var),'-dpdf', '-vector', '-fillpage');
 
     end
 end
@@ -673,6 +673,8 @@ fontSize = 23;
 labelFontSize = 23;
 lineWidth = 3;
 color1=[0.85, 0.33, 0.1];
+shadecolor=[0.682, 0.847, 1];
+
 color2='blue';
 
 t=tiledlayout(1,1,'TileSpacing', 'compact', 'Padding', 'compact');
@@ -681,34 +683,34 @@ sgtitle(titleStr, 'Interpreter', 'latex', 'FontSize', labelFontSize);
 
 nexttile
 figure(100);clf
-plot(tvec(1:end-1),U_sim(:,:), 'LineWidth', lineWidth); hold on
+plot(tvec,U_sim(:,:), 'LineWidth', lineWidth); hold on
 set(gca,  'FontSize', fontSize);
 ylabel("Solenoid current [A]", 'Interpreter', 'latex', 'FontSize', labelFontSize)
 xlabel("Iterations", 'Interpreter','latex', 'FontSize', labelFontSize)
 %title("Control input", 'FontSize',labelFontSize+2)
 yl = get(gca, 'YLim');ylim(yl)
-shadeMPCregions(tvec,controllModeVec,yl)
+shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
 legend({"$u_{x,p}$","$u_{y,p}$","$u_{x,n}$","$u_{y,n}$","MPC active"}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast')
 
 %Zoom-in box (Manually located)
-axInset = axes('Position', [0.3, 0.55, 0.25, 0.25]);  % [x y width height]
+axInset = axes('Position', [0.3, 0.25, 0.1, 0.5]);  % [x y width height]
 box on;
-plot(tvec(1:end-1), U_sim(:,:), 'LineWidth', lineWidth);
+plot(tvec, U_sim(:,:), 'LineWidth', lineWidth);
 yl = get(gca, 'YLim');ylim(yl)
-shadeMPCregions(tvec,controllModeVec,yl)
-xlim([25, 55]);   % zoomed x-range
-ylim([-0.8, 1.2]);   % zoomed y-range
+shadeMPCregions(tvec,controllModeVec,yl,shadecolor)
+xlim([0.1, 0.2]);   % zoomed x-range
+ylim([-6, 1]);   % zoomed y-range
 set(axInset, 'FontSize', 10);
 
 % Draw connecting lines (normalized coordinates)
-annotation('line', [0.3 0.21], [0.55 0.42], 'LineStyle', '--');
-annotation('line', [0.3+0.25  0.21], [0.55 0.42], 'LineStyle', '--');
+annotation('line', [0.3 0.225], [0.50 0.65], 'LineStyle', '--');
+annotation('line', [0.3  0.225], [0.75 0.65], 'LineStyle', '--');
 
 set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 20]) % or [left bottom width height]
 set(gcf, 'PaperUnits', 'centimeters')
 set(gcf, 'PaperSize', [41 20])
 set(gcf, 'PaperPositionMode', 'manual')
-print(gcf, 'Figures/estimation_error/plot_'+controllerModePrint+'_NEES', '-dpdf', '-vector', '-fillpage');
+print(gcf, 'Figures/estimation_error/plot_'+controllerModePrint+'_control', '-dpdf', '-vector', '-fillpage');
 
 
 %%

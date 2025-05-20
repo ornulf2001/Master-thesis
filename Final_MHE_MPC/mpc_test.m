@@ -1,154 +1,20 @@
-clc, clear
+clc,clear
 addpath(genpath('3D model reduced order_fixed'))
 
-N = 10:2:14;           % Range of N
-dt = 0.003;%0.001:0.001:0.003;          % Range of dt (can be vector later)
-
-[NGrid, dtGrid] = meshgrid(N, dt);
-[nDt, nN] = size(NGrid);
-nSim = 2;            % Number of Monte Carlo simulations
-
-    NT = 350;
-    % Define system parameters
-    params = parameters;
-    
-    % Find equilibrium point
-    index = @(A,i) A(i);
-    fz = @(z) index(f([0,0,z,zeros(1,7)]', [0,0,0,0]', params), 8);  
-    zeq =  fzero(fz,0.1);
-    xeq = [0, 0, zeq, zeros(1,7)]'; xlp=xeq;
-    X0 = [0; 0; zeq; 0; 0; 0; 0; 0; 0; 0;];
-    MHE_x0 = X0-xlp;%zeros(nStates,1);
-
-RMSE = zeros(nDt, nN, nSim);
-sims = zeros(10, NT, numel(NGrid),nSim);
-ests = zeros(10, NT, numel(NGrid),nSim);
-runtimes = zeros(nDt,nN,nSim);
-for k = 1:nSim
-    for i = 1:numel(NGrid)
-        [row, col] = ind2sub(size(NGrid), i);
-        currentN = NGrid(row, col);
-        currentDt = dtGrid(row, col);
-
-        disp("Simulation series " + k)
-        disp("Running simulation with N = " + ...
-                num2str(currentN) + " and dt = " + num2str(currentDt))
-
-        tic
-        [sim, est] = runSystem(currentN, currentDt, NT, X0, MHE_x0,zeq);
-        sims(:,:,i,k) = sim;
-        ests(:,:,i,k) = est;
-
-        error = sim - est;
-        RMSE(row, col, k) = sqrt(mean(error(:).^2));
-        runtimes(row,col,k)=toc;
-    end
-end
-
-disp("Finished all simulations")
-
-% Average across Monte Carlo runs
-RMSE_mean = mean(RMSE, 3);
-
-
-%% load previous data
-
-% clc,clear
-% datafolder = "data_20250510_140018";
-% load('data/'+datafolder+'/sims.mat')
-% load('data/'+datafolder+'/runtimes.mat')
-% load('data/'+datafolder+'/RMSEtotal.mat')
-% load('data/'+datafolder+'/RMSEmean.mat')
-% load('data/'+datafolder+'/ests.mat')
-
-%%
-folder="data/data_" + datestr(datetime("now"), "yyyymmdd_HHMMSS");
-if ~exist(folder, 'dir')
-    mkdir(folder);
-end
-save(folder + "/RMSEtotal","RMSE")
-save(folder + "/sims","sims")
-save(folder + "/ests","ests")
-save(folder + "/RMSEmean","RMSE_mean")
-save(folder + '/runtimes','runtimes')
-%% plot
-figure(1)
-clf
-
-try %Generally fails of length(dt)=1 -> RMSE is vector not grid
-    surf(NGrid, dtGrid, RMSE_mean); grid on; hold on
-   % surf(NGrid, dtGrid, mean(runtimes,3))
-    colorbar
-    xlabel('Horizon Length N');
-    ylabel('Time Step dt');
-    zlabel('RMSE');
-    title('Surface plot of RMSE vs. N and dt');
-
-catch
-    yyaxis left
-    plot(N,RMSE_mean); grid on; hold on;
-    ylabel('RMSE');
-
-    yyaxis right
-    plot(N,mean(squeeze(runtimes),2))
-    ylabel("runtimes")
-    xlabel('Horizon Length N');
-    title('Plot of RMSE vs. N');
-end
-
-%%
-z_traj_all = squeeze(ests(3, :, :, :)); % [NT, numel(NGrid), nSim]
-z_mean_by_N = zeros(length(N), NT);
-
-for nIdx = 1:length(N)
-    currentN = N(nIdx);
-
-    % Use only the first dt (for each N)
-    idx = find(NGrid(:) == currentN & dtGrid(:) == dt(end));
-
-    % If for some reason multiple indices, just pick the first (should only be one)
-    idx = idx(1);
-
-    % Extract z-trajectories for all MC runs at this N and dt
-    z_data = squeeze(ests(3, :, idx, :));   % [NT, nSim]
-
-    % Average over MC runs
-    z_mean_by_N(nIdx, :) = mean(z_data, 2); % [NT, 1]
-end
-
-sim_idx_N = find(dtGrid(:) == dt(end));  % These are indices for all N at dt(1)
-
-%k = 1;  % Or loop/average over k if you want MC mean too
-sims_meanMC=mean(sims,4);
-z_sim_trajectories = zeros(length(sim_idx_N), NT);
-
-for i = 1:length(sim_idx_N)
-    idx = sim_idx_N(i);
-    z_sim_trajectories(i, :) = sims_meanMC(3, :, idx);  % [1, NT]
-end
-sim_mean = mean(sims, 4);  % [1, NT]
-figure(2);clf
-plot(sim_mean(3,:,3),LineWidth=2);hold on
-yline(zeq)
-legends=[];
-for i=1:size(z_mean_by_N,1)
-    plot(1:NT,z_mean_by_N(i,:)+zeq)
-    legends=[legends,'N = '+string(N(i))];
-end
-legend(["","",legends])
-
-%% 
-savefig(folder + '/RMSE_vs_N.fig')
-
-%%
-
-function [sim,est]=runSystem(N,dt,NT, X0, MHE_x0,zeq)
-
-        params = parameters;
+params = parameters;
+index = @(A,i) A(i);
+fz = @(z) index(f([0,0,z,zeros(1,7)]', [0,0,0,0]', params), 8);  
+zeq =  fzero(fz,0.1);
+xeq = [0, 0, zeq, zeros(1,7)]'; xlp=xeq;
+ueq = [0,0,0,0]';
+N_MHE=10;
+dt=0.003;
+NT=350;
+X0 = [0; 0; zeq; 0; 0; 0; 0; 0; 0; 0;];
+MHE_x0 = X0-xlp;%zeros(nStates,1);
 
     
-    xeq = [0, 0, zeq, zeros(1,7)]';
-    ueq = [0,0,0,0]';
+    
     
     % Linearize model
     xlp = xeq;   
@@ -166,7 +32,6 @@ function [sim,est]=runSystem(N,dt,NT, X0, MHE_x0,zeq)
     
     t = 2;
     
-    N_MHE = N;
     N_MPC = 10;
     %dt = 0.003;
     %NT = 350;
@@ -186,8 +51,8 @@ function [sim,est]=runSystem(N,dt,NT, X0, MHE_x0,zeq)
     weightScaling = 1e-4; %Scaling factor for better posing of QP
     
     %MPC and LQR tuning
-    Q_MPC = diag([500 500 2000 10 10 1 1 10 1 1]);
-    R_MPC = diag([0.2, 0.2, 0.2, 0.2]);
+    Q_MPC = diag([5 5 1000 1 1 1 1 200 1 1]);
+    R_MPC = diag([0.002, 0.002, 0.002, 0.002]);
     
     Q_LQR = diag([ ...
        1e1,1e1,1e1,1e1,1e1, ...
@@ -257,7 +122,7 @@ function [sim,est]=runSystem(N,dt,NT, X0, MHE_x0,zeq)
     %   This hopefully leads to a smoother transition between control types.
     while RunningFlag == true && iterCounter < (NT)
         t_start = tic;
-        k = iterCounter;
+        k = iterCounter
         iterCounter = iterCounter + 1;
         
     
@@ -332,11 +197,9 @@ function [sim,est]=runSystem(N,dt,NT, X0, MHE_x0,zeq)
         %profile viewer
         elapsed = toc(t_start);
     end
-    
-    sim = X_sim;
-    est = MHE_est;
-end
 
-function gamma = gamma_f(k,fade_period)
-    gamma = (k-fade_period(1))/(fade_period(end)-fade_period(1));
-end
+    %%
+
+    figure(1);clf
+    plot(X_sim(3,:));hold on
+    yline(zeq)
