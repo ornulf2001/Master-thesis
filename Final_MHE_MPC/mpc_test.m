@@ -7,9 +7,9 @@ fz = @(z) index(f([0,0,z,zeros(1,7)]', [0,0,0,0]', params), 8);
 zeq =  fzero(fz,0.1);
 xeq = [0, 0, zeq, zeros(1,7)]'; xlp=xeq;
 ueq = [0,0,0,0]';
-N_MHE=10;
+N_MHE=12;
 dt=0.003;
-NT=350;
+NT=500;
 X0 = [0; 0; zeq; 0; 0; 0; 0; 0; 0; 0;];
 MHE_x0 = X0-xlp;%zeros(nStates,1);
 
@@ -52,7 +52,7 @@ MHE_x0 = X0-xlp;%zeros(nStates,1);
     
     %MPC and LQR tuning
     Q_MPC = diag([5 5 1000 1 1 1 1 200 1 1]);
-    R_MPC = diag([0.002, 0.002, 0.002, 0.002]);
+    R_MPC = diag([0.02, 0.02, 0.02, 0.02]);
     
     Q_LQR = diag([ ...
        1e1,1e1,1e1,1e1,1e1, ...
@@ -169,7 +169,7 @@ MHE_x0 = X0-xlp;%zeros(nStates,1);
             U = U_LQR;
         end
             
-    
+        U = U + 20*sin(k*0.1627).*ones(4,1);
     
         %[~, X] = ode15s(@(t, x) f(x, U, params), tspan, X_sim(:,k));
         %X_sim(:, k+1) = X(end, :)'; 
@@ -203,3 +203,5 @@ MHE_x0 = X0-xlp;%zeros(nStates,1);
     figure(1);clf
     plot(X_sim(3,:));hold on
     yline(zeq)
+    plot(MHE_est(3,:)+zeq)
+    legend(["sim","zeq","est"])

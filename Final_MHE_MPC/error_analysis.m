@@ -1,14 +1,14 @@
 clc, clear
 addpath(genpath('3D model reduced order_fixed'))
 
-N = 10:2:14;           % Range of N
+N = 6:2:18;           % Range of N
 dt = 0.003;%0.001:0.001:0.003;          % Range of dt (can be vector later)
 
 [NGrid, dtGrid] = meshgrid(N, dt);
 [nDt, nN] = size(NGrid);
 nSim = 2;            % Number of Monte Carlo simulations
 
-    NT = 350;
+    NT = 500;
     % Define system parameters
     params = parameters;
     
@@ -18,7 +18,8 @@ nSim = 2;            % Number of Monte Carlo simulations
     zeq =  fzero(fz,0.1);
     xeq = [0, 0, zeq, zeros(1,7)]'; xlp=xeq;
     X0 = [0; 0; zeq; 0; 0; 0; 0; 0; 0; 0;];
-    MHE_x0 = X0-xlp;%zeros(nStates,1);
+    MHE_x0 = X0-xlp;
+    MHE_x0(3)=MHE_x0(3)+0.001;
 
 RMSE = zeros(nDt, nN, nSim);
 sims = zeros(10, NT, numel(NGrid),nSim);
@@ -39,7 +40,7 @@ for k = 1:nSim
         sims(:,:,i,k) = sim;
         ests(:,:,i,k) = est;
 
-        error = sim - est;
+        error = sim(:,NT/2:NT) - est(:,NT/2:NT);
         RMSE(row, col, k) = sqrt(mean(error(:).^2));
         runtimes(row,col,k)=toc;
     end
@@ -71,6 +72,8 @@ save(folder + "/sims","sims")
 save(folder + "/ests","ests")
 save(folder + "/RMSEmean","RMSE_mean")
 save(folder + '/runtimes','runtimes')
+save(folder + "/Ns","N")
+save(folder+ "/dts", "dt")
 %% plot
 figure(1)
 clf
@@ -110,7 +113,7 @@ for nIdx = 1:length(N)
     idx = idx(1);
 
     % Extract z-trajectories for all MC runs at this N and dt
-    z_data = squeeze(ests(3, :, idx, :));   % [NT, nSim]
+    z_data = squeeze(ests(3, :, nIdx, :));   % [NT, nSim]
 
     % Average over MC runs
     z_mean_by_N(nIdx, :) = mean(z_data, 2); % [NT, 1]
@@ -127,15 +130,38 @@ for i = 1:length(sim_idx_N)
     z_sim_trajectories(i, :) = sims_meanMC(3, :, idx);  % [1, NT]
 end
 sim_mean = mean(sims, 4);  % [1, NT]
+
+
 figure(2);clf
-plot(sim_mean(3,:,3),LineWidth=2);hold on
+plot(z_sim_trajectories(7,:),'r-',LineWidth=2);hold on
 yline(zeq)
 legends=[];
 for i=1:size(z_mean_by_N,1)
     plot(1:NT,z_mean_by_N(i,:)+zeq)
     legends=[legends,'N = '+string(N(i))];
 end
-legend(["","",legends])
+legend(["sim","zeq",legends])
+
+
+
+%%
+figure(3);clf
+plot(mean(z_sim_trajectories(3,:),1)); hold on
+plot(z_mean_by_N(1,:)+zeq)
+plot(z_mean_by_N(7,:)+zeq)
+legend(["sim","N=6", "N=18"])
+
+
+
+
+
+
+
+
+
+
+
+
 
 %% 
 savefig(folder + '/RMSE_vs_N.fig')
@@ -176,7 +202,7 @@ function [sim,est]=runSystem(N,dt,NT, X0, MHE_x0,zeq)
     alpha = 0.9;
     noise_std = 0.1 * 1e-3; %0.1 mT
     R_MHE = inv(noise_std^2 * eye(nMeasurements));  
-    Q_MHE=10e3*diag([100,100,100,100,100,500,500,500,500,500]); 
+    Q_MHE=1e2 *diag([1,1,1,1,1,5,5,5,5,5]); 
     %Start out with low Q during start up, then increase Q after N_MHE+1. 
     %See below in loop
 
@@ -304,7 +330,7 @@ function [sim,est]=runSystem(N,dt,NT, X0, MHE_x0,zeq)
             U = U_LQR;
         end
             
-    
+        U = U +10*sin(0.5*k).*ones(4,1);
     
         %[~, X] = ode15s(@(t, x) f(x, U, params), tspan, X_sim(:,k));
         %X_sim(:, k+1) = X(end, :)'; 
@@ -313,6 +339,7 @@ function [sim,est]=runSystem(N,dt,NT, X0, MHE_x0,zeq)
         newU = U_sim(:, k); %For MHE input
     
         noise = noise_std * randn([nMeasurements, 1]);
+        %noise=0;
         yNext(:, k+1) = C * X_sim(:, k+1) - C * xlp + noise; 
         yNext_f(:, k+1) = alpha * yNext(:, k+1) + (1-alpha) * yNext_f(:, k); %EMA
         newY = yNext_f(:, k+1); %For MHE input
