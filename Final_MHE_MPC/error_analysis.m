@@ -1,13 +1,13 @@
 clc, clear
 addpath(genpath('3D model reduced order_fixed'))
 
-N = 6:2:20;           % Range of N
+N = 4:2:30;           % Range of N
 dt = 0.003;%0.001:0.001:0.003;          % Range of dt (can be vector later)
 
 
 [NGrid, dtGrid] = meshgrid(N, dt);
 [nDt, nN] = size(NGrid);
-nSim = 2;            % Number of Monte Carlo simulations
+nSim = 5;            % Number of Monte Carlo simulations
 
     NT = 500;
     % Define system parameters
@@ -43,7 +43,7 @@ for k = 1:nSim
         ests(:,:,i,k) = est;
 
         %error = sim(:,NT/2:NT) - est(:,NT/2:NT);
-        error = sim - (est+zeq);
+        error = sim - (est+xlp);
         RMSE(row, col, k) = sqrt(mean(error(:).^2));
         runtimes(row,col,k)=toc;
     end
@@ -94,7 +94,7 @@ linestyle2='--';
 figure(1)
 clf
 t=tiledlayout(1,1,'TileSpacing', 'compact', 'Padding', 'compact');
-sgtitle('$\textbf{RMSE vs. Horizon length $N$.}$','interpreter','latex','FontSize', labelFontSize+5)
+sgtitle('$\textbf{RMSE vs. Horizon length $\texttt{N}$.}$','interpreter','latex','FontSize', labelFontSize+5)
 
 nexttile
 % try %Generally fails of length(dt)=1 -> RMSE is vector not grid
@@ -122,7 +122,7 @@ nexttile
     yyaxis right
     plot(N,mean(squeeze(runtimes),2),'LineWidth', lineWidth)
     ylabel("Runtimes [s]", 'Interpreter','latex', 'FontSize', labelFontSize)
-    xlabel('Horizon Length $N$', 'Interpreter','latex', 'FontSize', labelFontSize);
+    xlabel('Horizon Length $\texttt{N}$', 'Interpreter','latex', 'FontSize', labelFontSize);
     axis tight
 
     legend({"RMSE $\pm 1\sigma$", 'RMSE mean',"Runtimes"}, 'Interpreter','latex', 'FontSize', fontSize, 'Location','northeast' )
@@ -134,6 +134,88 @@ set(gcf, 'PaperPositionMode', 'manual')
 print(gcf, 'Figures/RMSE/mid_R_osc', '-dpdf', '-vector', '-fillpage');
 
 savefig(folder + '/RMSE_vs_N_mid_R_osc.fig')
+
+%%
+% Only use dt == dt(end) for each N (assuming dt is scalar, otherwise filter for it)
+nStates = size(sims,1);
+RMSE_states = zeros(length(N), nStates);
+for nIdx = 1:length(N)
+    % Find the correct index for this N and dt
+    idx = find(NGrid(:) == N(nIdx) & dtGrid(:) == dt(end));
+    idx = idx(1); % Safety, should only be one
+    err_state_allMC = zeros(nStates, NT, nSim);
+    for k = 1:nSim
+        sim_this = sims(:,:,idx,k);  % [nStates, NT]
+        est_this = ests(:,:,idx,k);  % [nStates, NT]
+        err = sim_this - (est_this + xlp); % [nStates, NT]
+        err_state_allMC(:,:,k) = err;
+    end
+    % RMSE for each state, averaged over time and MC
+    RMSE_states(nIdx,:) = sqrt(mean(mean(err_state_allMC.^2,3),2))';
+end
+
+RMSE_states_norm = RMSE_states ./ max(RMSE_states, [], 1);
+
+% (Optional) Normalize state names for plotting
+stateNames = {'$x$', '$y$', '$z$', '$\alpha$', '$\beta$', '$\dot{x}$', '$\dot{y}$', '$\dot{z}$', '$\dot{\alpha}$', '$\dot{\beta}$'};
+baseColors = [
+    0.2, 0.4, 0.8;    % x/xdot (blue)
+    0.85, 0.33, 0.1;  % y/ydot (orange)
+    0.56, 0.345, 1;   % z/zdot (purple)
+    0.47, 0.67, 0.19; % phi/phidot (green)
+    0.94, 0.83, 0.07  % theta/thetadot (yellow)
+];
+idx_min = 1;
+idx_mid = round(length(N)/2);
+idx_max = length(N);
+N_selected = [N(idx_min), N(idx_mid), N(idx_max)];
+RMSE_states_norm_selected = RMSE_states_norm([idx_min, idx_mid, idx_max], :);
+
+barColors = baseColors;
+
+% Velocity colors: lighter version (mix with white)
+velColors = 0.5*baseColors + 0.5;   % lighter shades
+
+% Combine: first 5 pos, last 5 vel
+allColors = [barColors; velColors];
+
+% Plot grouped bar
+figure(10); clf;
+
+t=tiledlayout(1,1,'TileSpacing', 'compact', 'Padding', 'compact');
+sgtitle('$\textbf{Trends of normalized per-state RMSE for selected $\texttt{N}$}$','interpreter','latex','FontSize', labelFontSize+5)
+
+nexttile
+
+set(gcf, 'Units', 'centimeters', 'Position', [0 0 35 16])
+b = bar(N_selected, RMSE_states_norm_selected, 'grouped');
+hold on
+
+for i = 1:10
+    if i <= 5
+        b(i).FaceColor = barColors(i,:);
+        b(i).FaceAlpha = 1.0;
+    else
+        b(i).FaceColor = velColors(i-5,:);
+        b(i).FaceAlpha = 0.7;  % Can use <1 for extra effect
+    end
+end
+
+% Legend, axes, etc
+xlabel('Horizon Length $\texttt{N}$', 'Interpreter', 'latex', 'FontSize', labelFontSize)
+ylabel('Normalized RMSE', 'Interpreter', 'latex', 'FontSize', labelFontSize)
+legend(stateNames, 'Interpreter', 'latex', 'FontSize', fontSize, 'Location', 'northeastoutside')
+set(gca, 'FontSize', fontSize)
+%title('Normalized RMSE per state (selected $N$)', 'Interpreter', 'latex', 'FontSize', labelFontSize+5)
+grid on
+
+set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 20]) % or [left bottom width height]
+set(gcf, 'PaperUnits', 'centimeters')
+set(gcf, 'PaperSize', [41 20])
+set(gcf, 'PaperPositionMode', 'manual')
+print(gcf, 'Figures/RMSE/barplot_rmse_per_state_vs_N_normalized_selected_grouped', '-dpdf', '-vector', '-fillpage');
+
+savefig(folder + '/barplot_rmse_per_state_vs_N_normalized_selected_grouped.fig')
 
 %%
 z_traj_all = squeeze(ests(3, :, :, :)); % [NT, numel(NGrid), nSim]
@@ -213,12 +295,12 @@ plot(tvec,z_sim_trajectories(idx_min,:), 'r-', 'LineWidth', lineWidth)
 
 
 xlim([1.3, 1.47]);   % zoomed x-range
-ylim([0.03158, 0.03167]);   % zoomed y-range
+ylim([0.0317, 0.0319]);   % zoomed y-range
 set(axInset, 'FontSize', fontSize);
 
 % Draw connecting lines (normalized coordinates)
-annotation('line', [0.58 0.85], [0.37 0.47], 'LineStyle', '--');
-annotation('line', [0.88  0.85], [0.37 0.47], 'LineStyle', '--');
+annotation('line', [0.58 0.85], [0.37 0.48], 'LineStyle', '--');
+annotation('line', [0.88  0.85], [0.37 0.48], 'LineStyle', '--');
 
 set(gcf, 'Units', 'centimeters', 'Position', [0 0 41 20]) % or [left bottom width height]
 set(gcf, 'PaperUnits', 'centimeters')
@@ -261,13 +343,13 @@ ylabel('$z$ error [m]', 'Interpreter','latex', 'FontSize', labelFontSize)
     set(gca,'FontSize', fontSize);
 
 %Zoom-in box (Manually located)
-axInset = axes('Position', [0.3, 0.53, 0.1, 0.2]);  % [x y width height]
+axInset = axes('Position', [0.4, 0.4, 0.3, 0.2]);  % [x y width height]
 box on;
 plot(tvec,z_mean_by_N(idx_min,:)+zeq-z_sim_trajectories(idx_min,:), 'color','m', 'LineWidth', lineWidth);hold on;grid on
 plot(tvec,z_mean_by_N(idx_mid,:)+zeq-z_sim_trajectories(idx_mid,:), 'color',color2, 'LineWidth', lineWidth)
 plot(tvec,z_mean_by_N(idx_max,:)+zeq-z_sim_trajectories(idx_max,:), 'color',color5, 'LineWidth', lineWidth)
-xlim([0.004, 0.0042]);   % zoomed x-range
-ylim([0.0006, 0.00068]);   % zoomed y-range
+xlim([1, 1.3]);   % zoomed x-range
+ylim([-0.5e-4, 0.5e-4]);   % zoomed y-range
 set(axInset, 'FontSize', fontSize);
 
 % Draw connecting lines (normalized coordinates)
