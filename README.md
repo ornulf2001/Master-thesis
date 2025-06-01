@@ -1,4 +1,11 @@
-Newest release is in **test mhe MSD**:
+Newest and most relevant release: **Final_MHE_MPC**
+  - main.m runs the online control loop
+  - MHE and MPC classes are defined in MHEClass.m and MPCclass.m, respectively. 
+
+
+
+
+OLD RELEASES: **test mhe MSD**:
   - Here I develop an MHE routine for estimating the position and velocity of a Mass-spring-damper (MSD).
   - It should be robust for any other linear system, supply only A, B and C, and alter the dimensions/values of the weight matrices R, Q and M.
   - See /notes mhe setup.pdf for explanation of the cost function and constraints setup + dimensions
